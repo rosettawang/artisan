@@ -59,7 +59,7 @@ requests==2.32.3
 scipy==1.15.3
 setuptools==80.9.0
 sip==6.11.1
-statemachine==0.1
+python-statemachine
 Unidecode==1.4.0
 websockets==15.0.1
 wquantiles==0.6
