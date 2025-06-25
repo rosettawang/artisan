@@ -1489,11 +1489,23 @@ class StandaloneDesignerWindow(QMainWindow):
         
         # Profile name
         name_group = QGroupBox("Profile")
-        name_layout = QHBoxLayout(name_group)
-        name_layout.addWidget(QLabel("Name:"))
+        name_layout = QVBoxLayout(name_group)
+        
+        # Name input
+        name_input_layout = QHBoxLayout()
+        name_input_layout.addWidget(QLabel("Name:"))
         self.name_edit = QLineEdit(self.data.profile_name)
         self.name_edit.textChanged.connect(self.update_profile_name)
-        name_layout.addWidget(self.name_edit)
+        name_input_layout.addWidget(self.name_edit)
+        name_layout.addLayout(name_input_layout)
+        
+        # BT-only mode checkbox
+        self.bt_only_checkbox = QCheckBox("Bean Temperature Only Mode")
+        self.bt_only_checkbox.setToolTip("Focus on designing bean temperature curve only. Environmental temperature will be auto-generated.")
+        self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
+        self.bt_only_checkbox.toggled.connect(self.toggle_bt_only_mode)
+        name_layout.addWidget(self.bt_only_checkbox)
+        
         layout.addWidget(name_group)
         
         # Landmarks group
@@ -1503,10 +1515,6 @@ class StandaloneDesignerWindow(QMainWindow):
         # Curviness group
         curviness_group = self.create_curviness_group()
         layout.addWidget(curviness_group)
-        
-        # BT-only mode group
-        bt_only_group = self.create_bt_only_group()
-        layout.addWidget(bt_only_group)
         
         # Events group
         events_group = self.create_events_group()
@@ -1649,20 +1657,6 @@ class StandaloneDesignerWindow(QMainWindow):
         self.bt_curviness.setCurrentIndex(self.data.curviness['BT'] - 1)
         self.bt_curviness.currentIndexChanged.connect(self.update_bt_curviness)
         layout.addWidget(self.bt_curviness)
-        
-        return group
-        
-    def create_bt_only_group(self) -> QGroupBox:
-        """Create BT-only mode control group"""
-        group = QGroupBox("Design Mode")
-        layout = QVBoxLayout(group)
-        
-        # BT-only mode checkbox
-        self.bt_only_checkbox = QCheckBox("Bean Temperature Only Mode")
-        self.bt_only_checkbox.setToolTip("Focus on designing bean temperature curve only. Environmental temperature will be auto-generated.")
-        self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
-        self.bt_only_checkbox.toggled.connect(self.toggle_bt_only_mode)
-        layout.addWidget(self.bt_only_checkbox)
         
         return group
         
