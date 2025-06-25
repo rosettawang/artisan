@@ -17236,9 +17236,9 @@ class tgraphcanvas(FigureCanvas):
                     self.aw.disableEditMenus(designer=True)
                     self.redraw()
                 else:
-                    self.aw.designerAction.setChecked(False)
+                    pass  # Designer action removed
             elif reply == QMessageBox.StandardButton.Cancel:
-                self.aw.designerAction.setChecked(False)
+                pass  # Designer action removed
         else:
             #if no profile found
             #
@@ -18274,7 +18274,7 @@ class tgraphcanvas(FigureCanvas):
     def connect_designer(self) -> None:
         if not self.designerflag:
             self.designerflag = True
-            self.aw.designerAction.setChecked(True)
+            pass  # Designer action removed
             self.setCursor(Qt.CursorShape.PointingHandCursor)
             self.mousepress = False
             #create mouse events. Note: keeping the ids inside a list helps protect against extrange python behaviour.
@@ -18289,7 +18289,7 @@ class tgraphcanvas(FigureCanvas):
     #deactivates mouse events
     def disconnect_designer(self) -> None:
         self.designerflag = False
-        self.aw.designerAction.setChecked(False)
+        pass  # Designer action removed
         for dc in self.designerconnections:
             if dc is not None:
                 self.fig.canvas.mpl_disconnect(dc)
