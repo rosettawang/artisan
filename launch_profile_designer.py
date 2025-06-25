@@ -20,7 +20,7 @@ if src_dir not in sys.path:
 def main():
     """Launch the Profile Designer"""
     try:
-        from artisanlib.standalone_designer import main as designer_main
+        from artisanlib.designer import main_standalone as designer_main
         designer_main()
     except ImportError as e:
         print(f"Error importing Profile Designer: {e}")

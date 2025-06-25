@@ -24888,7 +24888,7 @@ class ApplicationWindow(QMainWindow):  # pyright: ignore [reportGeneralTypeIssue
     def launchStandaloneDesigner(self, _:bool = False) -> None:
         """Launch the standalone profile designer window"""
         try:
-            from artisanlib.standalone_designer import StandaloneDesignerWindow
+            from artisanlib.designer import StandaloneDesignerWindow
             
             # Check if window already exists
             if not hasattr(self, 'standalone_designer_window') or self.standalone_designer_window is None:
