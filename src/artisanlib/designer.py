@@ -802,7 +802,7 @@ class DesignerData:
         # Load saved defaults or use factory defaults
         self.landmarks = self.load_defaults(factory_defaults)
         
-        self.curviness = {'ET': 3, 'BT': 3}
+        self.curviness = 3  # Single curviness value for both curves
         
         # BT-only mode settings
         self.bt_only_mode = False
@@ -883,8 +883,8 @@ class DesignerData:
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            bt_spline = UnivariateSpline(time_array, bt_array, k=min(self.curviness['BT'], len(time_array)-1), s=0)
-            et_spline = UnivariateSpline(time_array, et_array, k=min(self.curviness['ET'], len(time_array)-1), s=0)
+            bt_spline = UnivariateSpline(time_array, bt_array, k=min(self.curviness, len(time_array)-1), s=0)
+            et_spline = UnivariateSpline(time_array, et_array, k=min(self.curviness, len(time_array)-1), s=0)
         
         bt_curve = bt_spline(time_dense)
         et_curve = et_spline(time_dense)
@@ -1163,7 +1163,14 @@ class DesignerData:
             data = json.load(f)
             self.profile_name = data.get('profile_name', 'Loaded Profile')
             self.landmarks = data.get('landmarks', self.landmarks)
-            self.curviness = data.get('curviness', self.curviness)
+            # Handle both old dict format and new single value format
+            curviness_data = data.get('curviness', self.curviness)
+            if isinstance(curviness_data, dict):
+                # Old format - use BT value
+                self.curviness = curviness_data.get('BT', 3)
+            else:
+                # New format - single value
+                self.curviness = curviness_data
             self.bt_only_mode = data.get('bt_only_mode', False)
             self.et_offset = data.get('et_offset', -50.0)
             self.events = data.get('events', [])
@@ -1643,20 +1650,13 @@ class StandaloneDesignerWindow(QMainWindow):
         group = QGroupBox("Curve Smoothness")
         layout = QHBoxLayout(group)
         
-        self.et_curviness_label = QLabel("ET:")
-        layout.addWidget(self.et_curviness_label)
-        self.et_curviness = QComboBox()
-        self.et_curviness.addItems(['1', '2', '3', '4', '5'])
-        self.et_curviness.setCurrentIndex(self.data.curviness['ET'] - 1)
-        self.et_curviness.currentIndexChanged.connect(self.update_et_curviness)
-        layout.addWidget(self.et_curviness)
-        
-        layout.addWidget(QLabel("BT:"))
-        self.bt_curviness = QComboBox()
-        self.bt_curviness.addItems(['1', '2', '3', '4', '5'])
-        self.bt_curviness.setCurrentIndex(self.data.curviness['BT'] - 1)
-        self.bt_curviness.currentIndexChanged.connect(self.update_bt_curviness)
-        layout.addWidget(self.bt_curviness)
+        layout.addWidget(QLabel("Smoothness:"))
+        self.curviness_combo = QComboBox()
+        self.curviness_combo.addItems(['1 (Linear)', '2', '3 (Default)', '4', '5 (Very Smooth)'])
+        self.curviness_combo.setCurrentIndex(self.data.curviness - 1)
+        self.curviness_combo.currentIndexChanged.connect(self.update_curviness)
+        layout.addWidget(self.curviness_combo)
+        layout.addStretch()
         
         return group
         
@@ -1869,14 +1869,9 @@ class StandaloneDesignerWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", f"Failed to save defaults: {e}")
     
-    def update_et_curviness(self, index: int):
-        """Update ET curve smoothness"""
-        self.data.curviness['ET'] = index + 1
-        self.canvas.update_plot()
-        
-    def update_bt_curviness(self, index: int):
-        """Update BT curve smoothness"""
-        self.data.curviness['BT'] = index + 1
+    def update_curviness(self, index: int):
+        """Update curve smoothness for both BT and ET"""
+        self.data.curviness = index + 1
         self.canvas.update_plot()
         
     def toggle_bt_only_mode(self, enabled: bool):
@@ -1891,10 +1886,6 @@ class StandaloneDesignerWindow(QMainWindow):
         self.header_et.setVisible(not self.data.bt_only_mode)
         for name, widgets in self.landmark_widgets.items():
             widgets['et'].setVisible(not self.data.bt_only_mode)
-            
-        # Update curviness controls
-        self.et_curviness_label.setVisible(not self.data.bt_only_mode)
-        self.et_curviness.setVisible(not self.data.bt_only_mode)
         
     def add_event(self):
         """Add a new event"""
@@ -2175,8 +2166,7 @@ class StandaloneDesignerWindow(QMainWindow):
             widgets['bt'].setText(f"{data['BT']:.1f}")
             widgets['et'].setText(f"{data['ET']:.1f}")
             
-        self.et_curviness.setCurrentIndex(self.data.curviness['ET'] - 1)
-        self.bt_curviness.setCurrentIndex(self.data.curviness['BT'] - 1)
+        self.curviness_combo.setCurrentIndex(self.data.curviness - 1)
         
         # Update BT-only mode controls
         self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
