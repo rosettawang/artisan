@@ -802,7 +802,7 @@ class DesignerData:
         # Load saved defaults or use factory defaults
         self.landmarks = self.load_defaults(factory_defaults)
         
-        self.curviness = 3  # Single curviness value for both curves
+        self.curviness = 2  # Single curviness value for both curves
         
         # BT-only mode settings
         self.bt_only_mode = False
@@ -1167,7 +1167,7 @@ class DesignerData:
             curviness_data = data.get('curviness', self.curviness)
             if isinstance(curviness_data, dict):
                 # Old format - use BT value
-                self.curviness = curviness_data.get('BT', 3)
+                self.curviness = curviness_data.get('BT', 2)
             else:
                 # New format - single value
                 self.curviness = curviness_data
@@ -1652,7 +1652,7 @@ class StandaloneDesignerWindow(QMainWindow):
         
         layout.addWidget(QLabel("Smoothness:"))
         self.curviness_combo = QComboBox()
-        self.curviness_combo.addItems(['1 (Linear)', '2', '3 (Default)', '4', '5 (Very Smooth)'])
+        self.curviness_combo.addItems(['1 (Linear)', '2 (Default)', '3 (Smooth)'])
         self.curviness_combo.setCurrentIndex(self.data.curviness - 1)
         self.curviness_combo.currentIndexChanged.connect(self.update_curviness)
         layout.addWidget(self.curviness_combo)
