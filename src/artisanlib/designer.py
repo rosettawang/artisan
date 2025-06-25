@@ -803,6 +803,11 @@ class DesignerData:
         self.landmarks = self.load_defaults(factory_defaults)
         
         self.curviness = {'ET': 3, 'BT': 3}
+        
+        # BT-only mode settings
+        self.bt_only_mode = False
+        self.et_offset = -50.0  # ET = BT + offset (negative means ET is lower than BT)
+        
         # Generate default name with timestamp
         import datetime
         now = datetime.datetime.now()
@@ -842,8 +847,16 @@ class DesignerData:
         
     def get_enabled_landmarks(self) -> Dict[str, Dict[str, Any]]:
         """Return only enabled landmarks"""
-        return {name: data for name, data in self.landmarks.items() 
-                if data['enabled'] or name in ['CHARGE', 'DROP']}
+        landmarks = {name: data for name, data in self.landmarks.items() 
+                    if data['enabled'] or name in ['CHARGE', 'DROP']}
+        
+        # If in BT-only mode, auto-generate ET values from BT
+        if self.bt_only_mode:
+            for name, data in landmarks.items():
+                landmarks[name] = data.copy()
+                landmarks[name]['ET'] = data['BT'] + self.et_offset
+        
+        return landmarks
     
     def generate_curves(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Generate time, BT, and ET curves from landmarks"""
@@ -884,6 +897,8 @@ class DesignerData:
             'profile_name': self.profile_name,
             'landmarks': self.landmarks,
             'curviness': self.curviness,
+            'bt_only_mode': self.bt_only_mode,
+            'et_offset': self.et_offset,
             'events': self.events,
             'alarms': self.alarms
         }
@@ -1149,6 +1164,8 @@ class DesignerData:
             self.profile_name = data.get('profile_name', 'Loaded Profile')
             self.landmarks = data.get('landmarks', self.landmarks)
             self.curviness = data.get('curviness', self.curviness)
+            self.bt_only_mode = data.get('bt_only_mode', False)
+            self.et_offset = data.get('et_offset', -50.0)
             self.events = data.get('events', [])
             self.alarms = data.get('alarms', [])
 
@@ -1215,7 +1232,10 @@ class ProfileCanvas(FigureCanvas):
             
             # Plot curves
             self.ax.plot(time_curve, bt_curve, 'r-', linewidth=2, label='BT (Bean Temperature)')
-            self.ax.plot(time_curve, et_curve, 'b-', linewidth=2, label='ET (Environmental Temperature)')
+            if not self.data.bt_only_mode:
+                self.ax.plot(time_curve, et_curve, 'b-', linewidth=2, label='ET (Environmental Temperature)')
+            else:
+                self.ax.plot(time_curve, et_curve, 'b--', linewidth=1, alpha=0.6, label='ET (Auto-generated)')
             
             # Plot landmark points
             enabled = self.data.get_enabled_landmarks()
@@ -1227,20 +1247,26 @@ class ProfileCanvas(FigureCanvas):
                                        color=color, markersize=10, picker=True, 
                                        markeredgecolor='black', markeredgewidth=1)[0]
                 
-                # Plot ET point (square)
-                et_point = self.ax.plot(landmark['time'], landmark['ET'], 's', 
-                                       color=color, markersize=10, picker=True,
-                                       markeredgecolor='black', markeredgewidth=1)[0]
-                
                 # Store references for interaction
                 self.landmark_artists[bt_point] = {'landmark': name, 'type': 'BT'}
-                self.landmark_artists[et_point] = {'landmark': name, 'type': 'ET'}
                 
-                # Add labels
-                self.ax.annotate(f'{name}\nBT', (landmark['time'], landmark['BT']), 
-                               xytext=(5, 5), textcoords='offset points', fontsize=8)
-                self.ax.annotate(f'{name}\nET', (landmark['time'], landmark['ET']), 
-                               xytext=(5, -15), textcoords='offset points', fontsize=8)
+                # Only plot ET points if not in BT-only mode
+                if not self.data.bt_only_mode:
+                    # Plot ET point (square)
+                    et_point = self.ax.plot(landmark['time'], landmark['ET'], 's', 
+                                           color=color, markersize=10, picker=True,
+                                           markeredgecolor='black', markeredgewidth=1)[0]
+                    self.landmark_artists[et_point] = {'landmark': name, 'type': 'ET'}
+                    
+                    # Add labels for both BT and ET
+                    self.ax.annotate(f'{name}\nBT', (landmark['time'], landmark['BT']), 
+                                   xytext=(5, 5), textcoords='offset points', fontsize=8)
+                    self.ax.annotate(f'{name}\nET', (landmark['time'], landmark['ET']), 
+                                   xytext=(5, -15), textcoords='offset points', fontsize=8)
+                else:
+                    # BT-only mode: only label BT points
+                    self.ax.annotate(f'{name}', (landmark['time'], landmark['BT']), 
+                                   xytext=(5, 5), textcoords='offset points', fontsize=8)
             
             # Plot events
             self.plot_events(time_curve, bt_curve, et_curve)
@@ -1478,6 +1504,10 @@ class StandaloneDesignerWindow(QMainWindow):
         curviness_group = self.create_curviness_group()
         layout.addWidget(curviness_group)
         
+        # BT-only mode group
+        bt_only_group = self.create_bt_only_group()
+        layout.addWidget(bt_only_group)
+        
         # Events group
         events_group = self.create_events_group()
         layout.addWidget(events_group)
@@ -1507,13 +1537,13 @@ class StandaloneDesignerWindow(QMainWindow):
         header_time.setStyleSheet("font-weight: bold;")
         header_bt = QLabel("BT (°C)")
         header_bt.setStyleSheet("font-weight: bold;")
-        header_et = QLabel("ET (°C)")
-        header_et.setStyleSheet("font-weight: bold;")
+        self.header_et = QLabel("ET (°C)")
+        self.header_et.setStyleSheet("font-weight: bold;")
         
         layout.addWidget(header_landmark, 0, 0)
         layout.addWidget(header_time, 0, 1)
         layout.addWidget(header_bt, 0, 2)
-        layout.addWidget(header_et, 0, 3)
+        layout.addWidget(self.header_et, 0, 3)
         
         row = 1
         for name, data in self.data.landmarks.items():
@@ -1605,7 +1635,8 @@ class StandaloneDesignerWindow(QMainWindow):
         group = QGroupBox("Curve Smoothness")
         layout = QHBoxLayout(group)
         
-        layout.addWidget(QLabel("ET:"))
+        self.et_curviness_label = QLabel("ET:")
+        layout.addWidget(self.et_curviness_label)
         self.et_curviness = QComboBox()
         self.et_curviness.addItems(['1', '2', '3', '4', '5'])
         self.et_curviness.setCurrentIndex(self.data.curviness['ET'] - 1)
@@ -1618,6 +1649,20 @@ class StandaloneDesignerWindow(QMainWindow):
         self.bt_curviness.setCurrentIndex(self.data.curviness['BT'] - 1)
         self.bt_curviness.currentIndexChanged.connect(self.update_bt_curviness)
         layout.addWidget(self.bt_curviness)
+        
+        return group
+        
+    def create_bt_only_group(self) -> QGroupBox:
+        """Create BT-only mode control group"""
+        group = QGroupBox("Design Mode")
+        layout = QVBoxLayout(group)
+        
+        # BT-only mode checkbox
+        self.bt_only_checkbox = QCheckBox("Bean Temperature Only Mode")
+        self.bt_only_checkbox.setToolTip("Focus on designing bean temperature curve only. Environmental temperature will be auto-generated.")
+        self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
+        self.bt_only_checkbox.toggled.connect(self.toggle_bt_only_mode)
+        layout.addWidget(self.bt_only_checkbox)
         
         return group
         
@@ -1839,6 +1884,23 @@ class StandaloneDesignerWindow(QMainWindow):
         """Update BT curve smoothness"""
         self.data.curviness['BT'] = index + 1
         self.canvas.update_plot()
+        
+    def toggle_bt_only_mode(self, enabled: bool):
+        """Toggle BT-only mode"""
+        self.data.bt_only_mode = enabled
+        self.update_landmarks_visibility()
+        self.canvas.update_plot()
+        
+    def update_landmarks_visibility(self):
+        """Update landmarks ET column visibility based on BT-only mode"""
+        # Update the landmarks group headers and ET inputs
+        self.header_et.setVisible(not self.data.bt_only_mode)
+        for name, widgets in self.landmark_widgets.items():
+            widgets['et'].setVisible(not self.data.bt_only_mode)
+            
+        # Update curviness controls
+        self.et_curviness_label.setVisible(not self.data.bt_only_mode)
+        self.et_curviness.setVisible(not self.data.bt_only_mode)
         
     def add_event(self):
         """Add a new event"""
@@ -2121,6 +2183,10 @@ class StandaloneDesignerWindow(QMainWindow):
             
         self.et_curviness.setCurrentIndex(self.data.curviness['ET'] - 1)
         self.bt_curviness.setCurrentIndex(self.data.curviness['BT'] - 1)
+        
+        # Update BT-only mode controls
+        self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
+        self.update_landmarks_visibility()
         
         # Refresh events and alarms lists
         self.refresh_events_list()
