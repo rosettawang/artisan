@@ -1506,22 +1506,30 @@ class StandaloneDesignerWindow(QMainWindow):
         name_input_layout.addWidget(self.name_edit)
         name_layout.addLayout(name_input_layout)
         
-        # BT-only mode checkbox
+        # BT-only mode and smoothness in one row
+        mode_layout = QHBoxLayout()
         self.bt_only_checkbox = QCheckBox("Bean Temperature Only Mode")
         self.bt_only_checkbox.setToolTip("Focus on designing bean temperature curve only. Environmental temperature will be auto-generated.")
         self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
         self.bt_only_checkbox.toggled.connect(self.toggle_bt_only_mode)
-        name_layout.addWidget(self.bt_only_checkbox)
+        mode_layout.addWidget(self.bt_only_checkbox)
+        
+        mode_layout.addStretch()
+        
+        mode_layout.addWidget(QLabel("Smoothness:"))
+        self.curviness_combo = QComboBox()
+        self.curviness_combo.addItems(['1', '2', '3'])
+        self.curviness_combo.setCurrentIndex(self.data.curviness - 1)
+        self.curviness_combo.currentIndexChanged.connect(self.update_curviness)
+        mode_layout.addWidget(self.curviness_combo)
+        
+        name_layout.addLayout(mode_layout)
         
         layout.addWidget(name_group)
         
         # Landmarks group
         landmarks_group = self.create_landmarks_group()
         layout.addWidget(landmarks_group)
-        
-        # Curviness group
-        curviness_group = self.create_curviness_group()
-        layout.addWidget(curviness_group)
         
         # Events group
         events_group = self.create_events_group()
@@ -1643,21 +1651,6 @@ class StandaloneDesignerWindow(QMainWindow):
         apply_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 5px; }")
         layout.addWidget(apply_btn, row, 2, 1, 2)  # Span 2 columns (right half)
             
-        return group
-        
-    def create_curviness_group(self) -> QGroupBox:
-        """Create curviness control group"""
-        group = QGroupBox("Curve Smoothness")
-        layout = QHBoxLayout(group)
-        
-        layout.addWidget(QLabel("Smoothness:"))
-        self.curviness_combo = QComboBox()
-        self.curviness_combo.addItems(['1 (Linear)', '2 (Default)', '3 (Smooth)'])
-        self.curviness_combo.setCurrentIndex(self.data.curviness - 1)
-        self.curviness_combo.currentIndexChanged.connect(self.update_curviness)
-        layout.addWidget(self.curviness_combo)
-        layout.addStretch()
-        
         return group
         
     def create_events_group(self) -> QGroupBox:
