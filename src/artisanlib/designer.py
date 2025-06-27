@@ -815,7 +815,6 @@ class DesignerData:
         
         # Events and alarms
         self.events = []
-        self.alarms = []
     
     def load_defaults(self, factory_defaults: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Load saved defaults from settings or return factory defaults"""
@@ -900,7 +899,6 @@ class DesignerData:
             'bt_only_mode': self.bt_only_mode,
             'et_offset': self.et_offset,
             'events': self.events,
-            'alarms': self.alarms
         }
         with open(filename, 'w') as f:
             json.dump(data, f, indent=2)
@@ -1174,7 +1172,6 @@ class DesignerData:
             self.bt_only_mode = data.get('bt_only_mode', False)
             self.et_offset = data.get('et_offset', -50.0)
             self.events = data.get('events', [])
-            self.alarms = data.get('alarms', [])
 
 
 def stringfromseconds_standalone(seconds: float) -> str:
@@ -1278,8 +1275,6 @@ class ProfileCanvas(FigureCanvas):
             # Plot events
             self.plot_events(time_curve, bt_curve, et_curve)
             
-            # Plot alarms
-            self.plot_alarms(time_curve, bt_curve, et_curve)
             
             self.ax.legend()
             self.ax.set_xlim(0, max(time_curve) * 1.1)
@@ -1349,48 +1344,48 @@ class ProfileCanvas(FigureCanvas):
             self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(25))  # Every 25°C
             
     def plot_events(self, time_curve, bt_curve, et_curve):
-        """Plot events as vertical lines on the chart"""
+        """Plot events and alarms on the chart"""
         y_min, y_max = self.ax.get_ylim()
         
         for event in self.data.events:
-            # Draw vertical line for event
-            self.ax.axvline(x=event['time'], color='green', linestyle='--', alpha=0.7, linewidth=1)
+            is_alarm = event.get('is_alarm', False)
             
-            # Add event label
-            desc = event['description'] if event['description'] else event['type']
-            self.ax.annotate(f"E: {desc}", 
-                           (event['time'], y_max * 0.9), 
-                           xytext=(5, 0), textcoords='offset points', 
-                           fontsize=7, color='green', rotation=90,
-                           ha='left', va='top')
+            # For time-based triggers, draw vertical line
+            if event['trigger_type'] == 'time':
+                event_time = event['trigger_value']
+                color = 'red' if is_alarm else 'green'
+                linestyle = '-' if is_alarm else '--'
+                
+                self.ax.axvline(x=event_time, color=color, linestyle=linestyle, alpha=0.7, linewidth=1)
+                
+                # Add event label
+                prefix = "A" if is_alarm else "E"
+                self.ax.annotate(f"{prefix}: {event['description']}", 
+                               (event_time, y_max * 0.9), 
+                               xytext=(5, 0), textcoords='offset points', 
+                               fontsize=7, color=color, rotation=90,
+                               ha='left', va='top')
+            else:
+                # For temperature-based triggers, draw horizontal line
+                temp_value = event['trigger_value']
+                if is_alarm:
+                    color = 'red' if event['trigger_type'] == 'BT' else 'darkred'
+                    linestyle = '-'
+                else:
+                    color = 'darkgreen' if event['trigger_type'] == 'BT' else 'darkblue'
+                    linestyle = ':'
+                
+                self.ax.axhline(y=temp_value, color=color, linestyle=linestyle, alpha=0.7, linewidth=1)
+                
+                # Add event label at left edge
+                x_pos = min(time_curve) if time_curve else 0
+                prefix = "A" if is_alarm else "E"
+                self.ax.annotate(f"{prefix}: {event['description']}", 
+                               (x_pos, temp_value), 
+                               xytext=(5, 5), textcoords='offset points', 
+                               fontsize=7, color=color,
+                               ha='left', va='bottom')
                            
-    def plot_alarms(self, time_curve, bt_curve, et_curve):
-        """Plot alarms as horizontal lines and markers"""
-        for alarm in self.data.alarms:
-            # Interpolate temperature curve at alarm time
-            import numpy as np
-            if alarm['time'] <= max(time_curve):
-                # Find approximate temperature at alarm time
-                idx = np.searchsorted(time_curve, alarm['time'])
-                if idx < len(time_curve):
-                    if alarm['temp_type'] == 'BT':
-                        actual_temp = bt_curve[idx] if idx < len(bt_curve) else bt_curve[-1]
-                        color = 'red'
-                    else:  # ET
-                        actual_temp = et_curve[idx] if idx < len(et_curve) else et_curve[-1]
-                        color = 'blue'
-                    
-                    # Draw alarm marker
-                    self.ax.plot(alarm['time'], alarm['temperature'], 
-                               marker='X', color=color, markersize=10, 
-                               markeredgecolor='black', markeredgewidth=1)
-                    
-                    # Add alarm label
-                    self.ax.annotate(f"A: {alarm['temp_type']} {alarm['temperature']}°C", 
-                                   (alarm['time'], alarm['temperature']), 
-                                   xytext=(5, 10), textcoords='offset points', 
-                                   fontsize=7, color=color,
-                                   bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8))
         
     def on_press(self, event):
         """Handle mouse press events"""
@@ -1536,8 +1531,6 @@ class StandaloneDesignerWindow(QMainWindow):
         layout.addWidget(events_group)
         
         # Alarms group
-        alarms_group = self.create_alarms_group()
-        layout.addWidget(alarms_group)
         
         # Buttons
         button_layout = self.create_buttons()
@@ -1654,8 +1647,8 @@ class StandaloneDesignerWindow(QMainWindow):
         return group
         
     def create_events_group(self) -> QGroupBox:
-        """Create events configuration group"""
-        group = QGroupBox("Events")
+        """Create unified events and alarms configuration group"""
+        group = QGroupBox("Events & Alarms")
         layout = QVBoxLayout(group)
         
         # Events list container
@@ -1666,85 +1659,46 @@ class StandaloneDesignerWindow(QMainWindow):
         layout.addWidget(self.events_container)
         
         # Add event controls
-        add_event_layout = QHBoxLayout()
+        add_event_layout = QGridLayout()
         
-        # Event time
-        add_event_layout.addWidget(QLabel("Time:"))
-        self.event_time = QLineEdit("5:00")
-        self.event_time.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]?[0-9]:[0-5][0-9]$')))
-        self.event_time.setMaximumWidth(60)
-        add_event_layout.addWidget(self.event_time)
+        # Trigger type (Time or Temperature)
+        add_event_layout.addWidget(QLabel("Trigger:"), 0, 0)
+        self.event_trigger_type = QComboBox()
+        self.event_trigger_type.addItems(['Time', 'BT Temp', 'ET Temp'])
+        self.event_trigger_type.currentTextChanged.connect(self.update_event_trigger_input)
+        add_event_layout.addWidget(self.event_trigger_type, 0, 1)
         
-        # Event type
-        add_event_layout.addWidget(QLabel("Type:"))
-        self.event_type = QComboBox()
-        self.event_type.addItems(['Heat Up', 'Turn Point', 'Gas Adjust', 'Air Flow', 'Drum Speed', 'Custom'])
-        add_event_layout.addWidget(self.event_type)
+        # Trigger value (time or temperature)
+        self.event_trigger_value = QLineEdit("5:00")
+        self.event_trigger_value.setMaximumWidth(80)
+        add_event_layout.addWidget(self.event_trigger_value, 0, 2)
         
-        # Event description
-        add_event_layout.addWidget(QLabel("Note:"))
-        self.event_description = QLineEdit()
-        self.event_description.setPlaceholderText("Optional description...")
-        add_event_layout.addWidget(self.event_description)
+        # Action type (Control or Alarm)
+        add_event_layout.addWidget(QLabel("Action:"), 1, 0)
+        self.event_action_type = QComboBox()
+        self.event_action_type.addItems(['Air Flow', 'Drum Speed', 'Gas Setting', 'Beep Alarm', 'Message Alarm', 'Note/Reminder'])
+        self.event_action_type.currentTextChanged.connect(self.update_event_value_input)
+        add_event_layout.addWidget(self.event_action_type, 1, 1)
+        
+        # Action value
+        self.event_value = QLineEdit("50")
+        self.event_value.setMaximumWidth(80)
+        self.event_value.setPlaceholderText("Value")
+        add_event_layout.addWidget(self.event_value, 1, 2)
+        
+        # Value unit label
+        self.event_unit_label = QLabel("%")
+        add_event_layout.addWidget(self.event_unit_label, 1, 3)
         
         # Add button
         add_event_btn = QPushButton("Add")
         add_event_btn.clicked.connect(self.add_event)
-        add_event_layout.addWidget(add_event_btn)
+        add_event_layout.addWidget(add_event_btn, 1, 4)
         
         layout.addLayout(add_event_layout)
         
         return group
         
-    def create_alarms_group(self) -> QGroupBox:
-        """Create alarms configuration group"""
-        group = QGroupBox("Temperature Alarms")
-        layout = QVBoxLayout(group)
-        
-        # Alarms list container
-        self.alarms_container = QWidget()
-        self.alarms_layout = QVBoxLayout(self.alarms_container)
-        self.alarms_layout.setContentsMargins(0, 0, 0, 0)
-        self.alarms_layout.setSpacing(2)
-        layout.addWidget(self.alarms_container)
-        
-        # Add alarm controls
-        add_alarm_layout = QHBoxLayout()
-        
-        # Alarm time
-        add_alarm_layout.addWidget(QLabel("Time:"))
-        self.alarm_time = QLineEdit("6:00")
-        self.alarm_time.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]?[0-9]:[0-5][0-9]$')))
-        self.alarm_time.setMaximumWidth(60)
-        add_alarm_layout.addWidget(self.alarm_time)
-        
-        # Temperature type
-        add_alarm_layout.addWidget(QLabel("Temp:"))
-        self.alarm_temp_type = QComboBox()
-        self.alarm_temp_type.addItems(['BT', 'ET'])
-        add_alarm_layout.addWidget(self.alarm_temp_type)
-        
-        # Temperature value
-        self.alarm_temp = QSpinBox()
-        self.alarm_temp.setRange(0, 300)
-        self.alarm_temp.setValue(180)
-        self.alarm_temp.setSuffix("°C")
-        add_alarm_layout.addWidget(self.alarm_temp)
-        
-        # Alarm action
-        add_alarm_layout.addWidget(QLabel("Action:"))
-        self.alarm_action = QComboBox()
-        self.alarm_action.addItems(['Beep', 'Message', 'Stop', 'Custom'])
-        add_alarm_layout.addWidget(self.alarm_action)
-        
-        # Add button
-        add_alarm_btn = QPushButton("Add")
-        add_alarm_btn.clicked.connect(self.add_alarm)
-        add_alarm_layout.addWidget(add_alarm_btn)
-        
-        layout.addLayout(add_alarm_layout)
-        
-        return group
         
     def create_buttons(self) -> QHBoxLayout:
         """Create action buttons"""
@@ -1879,26 +1833,100 @@ class StandaloneDesignerWindow(QMainWindow):
         self.header_et.setVisible(not self.data.bt_only_mode)
         for name, widgets in self.landmark_widgets.items():
             widgets['et'].setVisible(not self.data.bt_only_mode)
+            
+    def update_event_trigger_input(self, trigger_type: str):
+        """Update event trigger input based on trigger type"""
+        if trigger_type == "Time":
+            self.event_trigger_value.setText("5:00")
+            self.event_trigger_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]?[0-9]:[0-5][0-9]$')))
+            self.event_trigger_value.setPlaceholderText("mm:ss")
+        else:  # Temperature
+            self.event_trigger_value.setText("150")
+            self.event_trigger_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,3}$')))
+            self.event_trigger_value.setPlaceholderText("°C")
+            
+    def update_event_value_input(self, action_type: str):
+        """Update event value input and unit based on action type"""
+        if action_type == "Air Flow":
+            self.event_value.setText("50")
+            self.event_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,3}$')))
+            self.event_value.setPlaceholderText("0-100")
+            self.event_unit_label.setText("%")
+        elif action_type == "Drum Speed":
+            self.event_value.setText("65")
+            self.event_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,3}$')))
+            self.event_value.setPlaceholderText("RPM")
+            self.event_unit_label.setText("RPM")
+        elif action_type == "Gas Setting":
+            self.event_value.setText("75")
+            self.event_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,3}$')))
+            self.event_value.setPlaceholderText("0-100")
+            self.event_unit_label.setText("%")
+        elif action_type in ["Beep Alarm", "Message Alarm"]:
+            self.event_value.setText("Alarm text")
+            self.event_value.setValidator(None)
+            self.event_value.setPlaceholderText("Alarm message")
+            self.event_unit_label.setText("")
+        else:  # Note/Reminder
+            self.event_value.setText("")
+            self.event_value.setValidator(None)
+            self.event_value.setPlaceholderText("Description")
+            self.event_unit_label.setText("")
         
     def add_event(self):
-        """Add a new event"""
-        time_str = self.event_time.text()
-        event_type = self.event_type.currentText()
-        description = self.event_description.text()
+        """Add a new event or alarm"""
+        trigger_type = self.event_trigger_type.currentText()
+        trigger_value_str = self.event_trigger_value.text()
+        action_type = self.event_action_type.currentText()
+        action_value_str = self.event_value.text()
         
         try:
-            time_seconds = stringtoseconds_standalone(time_str)
+            # Parse trigger value
+            if trigger_type == "Time":
+                trigger_value = stringtoseconds_standalone(trigger_value_str)
+                trigger_unit = "time"
+            else:  # Temperature
+                trigger_value = float(trigger_value_str)
+                trigger_unit = "BT" if trigger_type == "BT Temp" else "ET"
+            
+            # Parse action value
+            if action_type in ["Note/Reminder", "Beep Alarm", "Message Alarm"]:
+                action_value = action_value_str  # Text description
+                action_unit = ""
+            else:
+                action_value = float(action_value_str)
+                if action_type == "Air Flow":
+                    action_unit = "%"
+                elif action_type == "Drum Speed":
+                    action_unit = "RPM"
+                elif action_type == "Gas Setting":
+                    action_unit = "%"
+                else:
+                    action_unit = ""
+            
+            # Create description
+            if action_type in ["Note/Reminder", "Beep Alarm", "Message Alarm"]:
+                description = action_value
+            else:
+                description = f"{action_type}: {action_value}{action_unit}"
+            
             event = {
-                'time': time_seconds,
-                'type': event_type,
-                'description': description
+                'trigger_type': trigger_unit,
+                'trigger_value': trigger_value,
+                'action_type': action_type,
+                'action_value': action_value,
+                'action_unit': action_unit,
+                'description': description,
+                'is_alarm': action_type in ["Beep Alarm", "Message Alarm"]
             }
+            
             self.data.events.append(event)
             self.refresh_events_list()
             self.canvas.update_plot()
             
-            # Clear inputs
-            self.event_description.clear()
+            # Reset to defaults for next entry
+            self.update_event_trigger_input(trigger_type)
+            self.update_event_value_input(action_type)
             
         except Exception as e:
             QMessageBox.warning(self, "Invalid Event", f"Could not add event: {e}")
@@ -1910,34 +1938,7 @@ class StandaloneDesignerWindow(QMainWindow):
             self.refresh_events_list()
             self.canvas.update_plot()
             
-    def add_alarm(self):
-        """Add a new alarm"""
-        time_str = self.alarm_time.text()
-        temp_type = self.alarm_temp_type.currentText()
-        temp_value = self.alarm_temp.value()
-        action = self.alarm_action.currentText()
-        
-        try:
-            time_seconds = stringtoseconds_standalone(time_str)
-            alarm = {
-                'time': time_seconds,
-                'temp_type': temp_type,
-                'temperature': temp_value,
-                'action': action
-            }
-            self.data.alarms.append(alarm)
-            self.refresh_alarms_list()
-            self.canvas.update_plot()
             
-        except Exception as e:
-            QMessageBox.warning(self, "Invalid Alarm", f"Could not add alarm: {e}")
-            
-    def remove_alarm(self, index: int):
-        """Remove alarm at specific index"""
-        if 0 <= index < len(self.data.alarms):
-            del self.data.alarms[index]
-            self.refresh_alarms_list()
-            self.canvas.update_plot()
             
     def refresh_events_list(self):
         """Refresh the events list display with trash icons"""
@@ -1949,9 +1950,13 @@ class StandaloneDesignerWindow(QMainWindow):
         
         # Add each event with trash icon
         for i, event in enumerate(self.data.events):
-            time_str = stringfromseconds_standalone(event['time'])
-            desc = event['description'] if event['description'] else event['type']
-            item_text = f"{time_str} - {event['type']}: {desc}"
+            # Format trigger display
+            if event['trigger_type'] == 'time':
+                trigger_str = stringfromseconds_standalone(event['trigger_value'])
+            else:
+                trigger_str = f"{event['trigger_value']}°C {event['trigger_type']}"
+            
+            item_text = f"{trigger_str} - {event['description']}"
             
             # Create horizontal layout for event item
             item_widget = QWidget()
@@ -1973,38 +1978,6 @@ class StandaloneDesignerWindow(QMainWindow):
             
             self.events_layout.addWidget(item_widget)
             
-    def refresh_alarms_list(self):
-        """Refresh the alarms list display with trash icons"""
-        # Clear existing items
-        for i in reversed(range(self.alarms_layout.count())):
-            child = self.alarms_layout.itemAt(i).widget()
-            if child:
-                child.deleteLater()
-        
-        # Add each alarm with trash icon
-        for i, alarm in enumerate(self.data.alarms):
-            time_str = stringfromseconds_standalone(alarm['time'])
-            item_text = f"{time_str} - {alarm['temp_type']} {alarm['temperature']}°C ({alarm['action']})"
-            
-            # Create horizontal layout for alarm item
-            item_widget = QWidget()
-            item_layout = QHBoxLayout(item_widget)
-            item_layout.setContentsMargins(2, 2, 2, 2)
-            
-            # Alarm text label
-            label = QLabel(item_text)
-            label.setStyleSheet("padding: 2px;")
-            item_layout.addWidget(label)
-            
-            # Trash button
-            trash_btn = QPushButton("🗑")
-            trash_btn.setMaximumSize(20, 20)
-            trash_btn.setStyleSheet("QPushButton { background-color: #e0e0e0; color: #666; border: none; border-radius: 3px; font-size: 12px; } QPushButton:hover { background-color: #d0d0d0; }")
-            trash_btn.clicked.connect(lambda checked, idx=i: self.remove_alarm(idx))
-            trash_btn.setToolTip("Delete this alarm")
-            item_layout.addWidget(trash_btn)
-            
-            self.alarms_layout.addWidget(item_widget)
         
     def save_draft_profile(self):
         """Save current points/landmarks as draft file (adsg format)"""
@@ -2165,9 +2138,8 @@ class StandaloneDesignerWindow(QMainWindow):
         self.bt_only_checkbox.setChecked(self.data.bt_only_mode)
         self.update_landmarks_visibility()
         
-        # Refresh events and alarms lists
+        # Refresh events list
         self.refresh_events_list()
-        self.refresh_alarms_list()
         
     def load_settings(self):
         """Load window settings"""
