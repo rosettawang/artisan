@@ -8,7 +8,6 @@
   <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py src/artisanlib/pid_dialogs.py src/artisanlib/designer.py" />
   <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
   <meta name="spec-decision" content="Grey out the Kaleido event-flag checkboxes when the machine has only ever reported sid low-nibble 0? Recommended no — do it as a tooltip note instead. Greying out on observed behaviour is stateful UI that will be wrong on the first machine that reports events late. Does not block." />
-  <meta name="spec-decision" content="Delete the fork's capBurnerOutputFlag checkbox? Recommended yes — upstream's dutyMax spin box (pid_dialogs.py:554) already caps burner output, at any value rather than only 80%, and the checkbox derives its state from dutyMax==80 so the two disagree whenever the cap is not exactly 80. If the 80% preset is genuinely wanted, keep it as a button that sets the spin box rather than a second source of truth. Does not block." />
   <meta name="spec-decision" content="What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer." />
   <link rel="stylesheet" href="spec.css" />
 </head>
@@ -104,7 +103,23 @@ stty: tcsetattr: Invalid argument
 
 <p>The lesson for this fork is the one in <code>CLAUDE.md</code>: <strong>pull upstream before starting a phase.</strong> Sitting 433 commits behind did not just mean missing features — it meant running a knowingly-broken RoR on the machine the fork exists to serve.</p>
 
-<h2>Finding 7 — the cap-burner flag duplicates a control upstream already had</h2>
+<h2><del>Finding 7 — the cap-burner flag duplicates a control upstream already had</del> ✅ Removed Aug 6, 2026</h2>
+
+<div class="callout">
+<h4>Decided and done — owner answered "delete the cap burner checkbox", Aug 6, 2026</h4>
+<p><code>capBurnerOutputFlag</code>, both copies of <code>capBurnerOutputSlot</code> and their orphaned <code>@pyqtSlot</code> decorators are gone. Use upstream's <strong>Max</strong> spin box in the duty-clamp group (Config ▸ PID ▸ Duty, <code>pid_dialogs.py:554</code>) — it does the same job at any value, not only 80%.</p>
+<p><strong>Removing it turned up collateral damage.</strong> The 2025 fork's diff to <code>pid_dialogs.py</code> was not only the checkbox — it also silently carried three unrelated changes, none of them a feature:</p>
+<ul>
+  <li>deleted <code>setFocusPolicy(Qt.FocusPolicy.NoFocus)</code> from both Ramp/Soak "Load from profile" and "Load from background" checkboxes</li>
+  <li>deleted a commented-out slider line in <code>PXG4pidDlgControl</code></li>
+  <li><strong>changed <code>C2Widget.setLayout(svlayout)</code> to <code>tab2Layout</code></strong> in <code>PXRpidDlgControl</code> — the wrong layout on the SV tab, which is a real bug rather than a cosmetic drift</li>
+</ul>
+<p>All three are restored. <code>src/artisanlib/pid_dialogs.py</code> is now <strong>byte-identical to <code>upstream/master</code></strong>, which is the strongest possible statement that nothing of the fork's remains in it. Verify with <code>git diff --quiet upstream/master -- src/artisanlib/pid_dialogs.py</code>.</p>
+<p>The general lesson, worth carrying into the MCP work: this fork's diffs contain edits nobody intended. When a fork feature is removed, diff the <em>whole file</em> against upstream rather than just deleting the feature's own lines.</p>
+</div>
+
+<p>The original finding, kept because the reasoning is what justified the removal:</p>
+
 
 <p>The 2025 fork added <code>capBurnerOutputFlag</code> to <code>pid_dialogs.py</code>: a checkbox labelled "Cap Burner Output at 80%" whose slot sets <code>pidcontrol.dutyMax = 80</code>.</p>
 

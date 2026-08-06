@@ -796,11 +796,6 @@ class PID_DlgControl(ArtisanDialog):
         if pid_controller == 4:
             self.loadPIDfromBackground.setEnabled(False)
 
-        self.capBurnerOutputFlag = QCheckBox(QApplication.translate('CheckBox', 'Cap Burner Output at 80%'))
-        self.capBurnerOutputFlag.setToolTip(QApplication.translate('Tooltip', 'Limit the maximum burner output to 80%'))
-        self.capBurnerOutputFlag.setChecked(self.aw.pidcontrol.dutyMax == 80) # Initialize based on current dutyMax
-        self.capBurnerOutputFlag.toggled.connect(self.capBurnerOutputSlot)
-
         flagsLayout = QHBoxLayout()
         flagsLayout.addWidget(self.startPIDonCHARGE)
         flagsLayout.addSpacing(10)
@@ -809,7 +804,6 @@ class PID_DlgControl(ArtisanDialog):
         flagsLayout.addWidget(self.createEvents)
         flagsLayout.addSpacing(10)
         flagsLayout.addWidget(self.loadPIDfromBackground)
-        flagsLayout.addWidget(self.capBurnerOutputFlag) # fork: cap burner output at 80%
         flagsLayout.addSpacing(10) # to avoid cutting the last flag label (layout bug!)
         flagsLayout.addStretch()
 
@@ -932,8 +926,10 @@ class PID_DlgControl(ArtisanDialog):
         exportButton.clicked.connect(self.exportrampsoaks)
         self.loadRampSoakFromProfile = QCheckBox(QApplication.translate('CheckBox', 'Load from profile'))
         self.loadRampSoakFromProfile.setChecked(self.aw.pidcontrol.loadRampSoakFromProfile)
+        self.loadRampSoakFromProfile.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.loadRampSoakFromBackground = QCheckBox(QApplication.translate('CheckBox', 'Load from background'))
         self.loadRampSoakFromBackground.setChecked(self.aw.pidcontrol.loadRampSoakFromBackground)
+        self.loadRampSoakFromBackground.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.rsfile = QLabel(self.aw.qmc.rsfile)
         self.rsfile.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1733,15 +1729,6 @@ class PID_DlgControl(ArtisanDialog):
         self.aw.PID_DlgControl_activeTab = self.tabWidget.currentIndex()
         self.accept()
 
-    @pyqtSlot(int)
-    def capBurnerOutputSlot(self, checked: bool) -> None:
-        """Sets the maximum burner output based on the checkbox state."""
-        new_duty_max = 80 if checked else 100
-        self.aw.pidcontrol.setDutyMax(new_duty_max)
-        if hasattr(self, 'dutyMax'): # Check if the dutyMax spinbox exists (internal PID)
-            self.dutyMax.setValue(new_duty_max)
-        self.aw.sendmessage(QApplication.translate('Message', f'Burner output max set to {new_duty_max}%'))
-
 ############################################################################
 ######################## FUJI PX PID CONTROL DIALOG ########################
 ############################################################################
@@ -2203,7 +2190,7 @@ class PXRpidDlgControl(PXpidDlgControl):
         C1Widget.setLayout(buttonMasterLayout)
         TabWidget.addTab(C1Widget,QApplication.translate('Tab','RS'))
         C2Widget = QWidget()
-        C2Widget.setLayout(tab2Layout)
+        C2Widget.setLayout(svlayout)
         TabWidget.addTab(C2Widget,QApplication.translate('Tab','SV'))
         tab3Hlayout = QHBoxLayout()
         tab3Hlayout.addStretch()
@@ -3256,6 +3243,7 @@ class PXG4pidDlgControl(PXpidDlgControl):
         tab2Layout.addWidget(self.tab2easySVsliderFlag,8,1)
         tab2Layout.addWidget(pidSVSliderMinLabel,8,3)
         tab2Layout.addWidget(self.pidSVSliderMin,8,4)
+#        tab2Layout.addWidget(tab2easyOFFsvslider,9,0)
 #        tab2Layout.addWidget(tab2easyONsvslider,9,1)
         tab2Layout.addWidget(pidSVSliderMaxLabel,9,3)
         tab2Layout.addWidget(self.pidSVSliderMax,9,4)
@@ -4781,14 +4769,6 @@ class PXG4pidDlgControl(PXpidDlgControl):
         else:
             self.aw.qmc.adderror(QApplication.translate('Error Message','Segment values could not be written into PID'))
 
-    @pyqtSlot(bool)
-    def capBurnerOutputSlot(self, checked: bool) -> None:
-        """Sets the maximum burner output based on the checkbox state."""
-        new_duty_max = 80 if checked else 100
-        self.aw.pidcontrol.setDutyMax(new_duty_max)
-        if hasattr(self, 'dutyMax'): # Check if the dutyMax spinbox exists (internal PID)
-            self.dutyMax.setValue(new_duty_max)
-        self.aw.sendmessage(QApplication.translate('Message', f'Burner output max set to {new_duty_max}%'))
 
 ############################################################################
 ######################## DTA PID CONTROL DIALOG ############################
