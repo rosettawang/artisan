@@ -94,10 +94,24 @@
 </tr>
 <tr>
   <td>2</td>
-  <td>Point Artisan at the external bridge</td>
+  <td><del>Point Artisan at the external bridge</del> <strong>⚠ Attempted and abandoned, Aug 6, 2026</strong></td>
   <td>mcp-server (pre-work)</td>
-  <td>Starts the bridge holding the serial port and listening on <code>127.0.0.1:8765</code>; verifies the relay once Artisan connects.</td>
-  <td>Artisan ▸ <b>OFF</b>, then Config ▸ Device ▸ Networks ▸ Kaleido: tick <b>WiFi</b>, host <code>127.0.0.1</code>, port <code>8765</code>, then <b>ON</b>.</td>
+  <td>The bridge was started holding the serial port and listening on <code>127.0.0.1:8765</code>. <strong>Artisan never connected</strong> — 0 frames relayed — because the WiFi switch had not taken effect. The session then moved on to spec work <em>with the bridge still holding the port</em>, and the owner started a roast. Artisan was locked out of its own roaster until the daemon was killed. <strong>Nothing was logged during that window and the duration is unknown.</strong></td>
+  <td>Retry only when not roasting. The correct order is Artisan <b>OFF</b> → Config ▸ Device ▸ Networks ▸ Kaleido: tick <b>WiFi</b>, host <code>127.0.0.1</code>, port <code>8765</code> → start the bridge → <b>ON</b>. <strong>Rule learned: never leave the bridge holding the port across a topic change.</strong> One process owns the serial port; if it is not Artisan, Artisan is blind.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><del>Run the merged branch from source</del> <strong>✓ Aug 6, 2026</strong></td>
+  <td>(merge verification)</td>
+  <td>Built <code>.venv313</code> on Python 3.13.15, ran the suite (2359 pass, 11 pre-existing upstream failures, zero regressions), launched <code>artisan 4.2.1</code> and the standalone Profile Designer, both rendering correctly.</td>
+  <td><del>Quit the installed Artisan</del> — done. A second instance launches as <code>artisanviewer</code>, which has no Tools menu, so the installed app must be closed to test menus.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td>Open Tools ▸ Designer and Tools ▸ Profile Designer, and the PID dialog</td>
+  <td>(merge verification)</td>
+  <td>Cannot — driving menus needs Accessibility permission this shell does not have. Everything reachable without clicking has been checked.</td>
+  <td>Launch <code>cd ~/Documents/artisan/src &amp;&amp; ../.venv313/bin/python artisan.py</code> and open all three. Both Designer entries should be present and distinct.</td>
 </tr>
 <tr>
   <td>3</td>
@@ -118,9 +132,11 @@
 <h2 id="bottlenecks">Bottlenecks</h2>
 <p><em>Hand-maintained.</em> What is worth doing first, as opposed to what the dependency graph permits.</p>
 <ul>
-  <li><strong>Nothing here is proven against a moving roast.</strong> Every temperature claim was measured on a machine sitting at room temperature. The interlocks have never refused a real command during a real roast. Prefer the phases that get to a watched, beanless heated run soonest over the phases that add tools.</li>
-  <li><strong>The write path is the whole risk.</strong> Reads are free and reversible; a burner command is neither. Hardware-pass row 3 gates more than it looks like it does — until one write is observed, every actuator behaviour in both specs is inference from <code>artisanlib/kaleido.py</code>.</li>
-  <li><strong>Rebase cost compounds.</strong> The longer this fork sits behind upstream, the more each spec's <code>spec-touches</code> hurts. Pull upstream before starting a phase, not after.</li>
+  <li><strong>The write path is the whole risk, and it is still untouched.</strong> Reads are free and reversible; a burner command is neither. Hardware-pass row 3 gates more than it looks like it does — <strong>no write of any kind has ever reached this roaster</strong>, so every actuator behaviour in both specs is inference from <code>artisanlib/kaleido.py</code>. This is the single largest gap between what this repo claims and what has been observed.</li>
+  <li><strong>Nothing is proven against a <em>moving</em> roast.</strong> Updated Aug 6, 2026: the merge itself is now proven — 2359 tests pass with zero regressions, the app and the standalone designer both run from source. What remains unproven is behaviour under heat. Every temperature claim was measured on a machine at room temperature, and the interlocks have never refused a real command during a real roast. Prefer the phases that reach a watched, beanless heated run over the phases that add tools.</li>
+  <li><strong>The fork's diffs contain edits nobody intended.</strong> Removing one feature from <code>pid_dialogs.py</code> turned up three unrelated changes, one a real bug. <code>designer.py</code> (1418 added lines) and <code>main.py</code> have not been audited the same way. Do that before building on either — it is cheap now and expensive after new code sits on top.</li>
+  <li><strong>A running bridge owns the roaster.</strong> Learned the hard way (hardware-pass row 2): one process holds the serial port, and if it is not Artisan then Artisan is blind. Never leave the bridge running across a change of topic, and never while anyone might roast.</li>
+  <li><strong>Rebase cost compounds.</strong> The longer this fork sits behind upstream, the more each spec's <code>spec-touches</code> hurts — and the 433-commit gap meant roasting on a knowingly-broken Kaleido RoR for months. Pull upstream before starting a phase, not after.</li>
 </ul>
 
 <h2 id="reconciliations">Reconciliations</h2>
@@ -138,6 +154,36 @@
   <td>(pre-spec, external bridge)</td>
   <td>The simulator used <code>sid=1</code> as its idle status, whose low nibble is the CHARGE flag — so it announced a CHARGE on every poll.</td>
   <td>Code won (<code>sid=0x10</code>), with a regression test. The real machine reports <code>sid=0</code>, so the trap never applied to it — see <a href="kaleido-machine-adaptations.html">Finding 2</a>.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>kaleido-machine-adaptations</td>
+  <td>Spec described a clean slate. In fact a Kaleido adaptation shipped in 2025 (BT-only mode, <code>602fcdb2c</code>), invisible because it lived on <code>origin/main</code> while this clone tracked <code>origin/master</code>.</td>
+  <td>Spec corrected — Finding 5 added. Lesson: check every branch on the remote, not just the checked-out one.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>kaleido-machine-adaptations</td>
+  <td>Finding 5 claimed the Celsius assumption was the <code>et_offset = -50.0</code> constant. Running the designer showed it is the <em>whole</em> module: headers <code>BT (°C)</code>/<code>ET (°C)</code>, y-axis <code>Temperature (°C)</code>, Celsius default landmarks.</td>
+  <td>Observation won. Finding 5 rewritten from inference to measurement; the open decision is now broader than one constant.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>(no spec — fork hygiene)</td>
+  <td>Removing <code>capBurnerOutputFlag</code> revealed the fork's <code>pid_dialogs.py</code> diff also carried three unintended changes, including <code>C2Widget.setLayout(svlayout)</code> → <code>tab2Layout</code>, the wrong layout on the SV tab.</td>
+  <td>All restored; the file is byte-identical to upstream. <strong>Standing rule:</strong> when removing a fork feature, diff the whole file against upstream rather than deleting the feature's own lines. <code>designer.py</code> and <code>main.py</code> have <em>not</em> had this treatment yet.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>CLAUDE.md</td>
+  <td>Stated the Python floor as 3.11+. <code>src/pyproject.toml</code> declares <code>&gt;=3.12</code> (<code>6908b688c</code>), so a future session could have trusted a 3.11 run.</td>
+  <td>Corrected to 3.12+, with the CI version (3.14) recorded alongside.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>CLAUDE.md</td>
+  <td><code>pytest test/</code> against a live <code>HOME</code> wrote into the owner's real preferences — <code>test_main.py:3196</code> uses a bare <code>QSettings()</code>. Seven window-geometry keys deleted, <code>starts</code> reset, two test keys left behind.</td>
+  <td>Repaired from a pre-run backup (7/7 keys restored, junk deleted, device config never affected). CLAUDE.md now carries the backup + isolated-<code>HOME</code> invocation.</td>
 </tr>
 </table>
 
