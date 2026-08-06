@@ -25,7 +25,7 @@
 import time as libtime
 startup_time = libtime.process_time()
 
-from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
+from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__, __fork_label__
 
 import os
 import sys  # @UnusedImport
@@ -4921,7 +4921,7 @@ class ApplicationWindow(QMainWindow):
 
     def updateWindowTitle(self) -> None:
         try:
-            appTitle = f'{(application_viewer_name.lower() if self.app.artisanviewerMode else application_name.lower())} {str(__version__)}'
+            appTitle = f'{(application_viewer_name.lower() if self.app.artisanviewerMode else application_name.lower())} {str(__version__)}{__fork_label__}'
             dirtySign = '* ' if self.qmc.safesaveflag else ''
             if self.simulator is not None and self.simulatorpath:
                 # simulator running
