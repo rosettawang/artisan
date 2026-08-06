@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading a plan is not consenting to be driven by it</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/pid_control.py src/artisanlib/pid_dialogs.py src/artisanlib/main.py" />
+  <meta name="spec-decision" content="Turn pidOnCHARGE off? Recommended YES, and it is the whole fix for the accidental handover — it is the single flag that converts 'a plan is loaded' into 'the burner is being driven'. Everything else stays inert until the PID is on. Artisan's own code default is False; only this install sets it True. Settings-only, reversible, no code. Does not block, but nothing else here matters until it is answered." />
+  <meta name="spec-decision" content="On background load, should the background's settings be APPLIED or merely AVAILABLE? Recommended: available. Replace the four hidden always-on flags (loadpidfrombackground, loadRampSoakFromBackground, loadalarmsfrombackground, phasesfromBackgroundflag) with one explicit 'Apply background settings' action the operator presses. A file should not silently rewrite the controller's tuning. BLOCKS the code work below — the flags stay as they are until this is answered." />
+  <meta name="spec-decision" content="Drop UI_mode from EXPERT to DEFAULT? Recommended yes, DEFAULT (2) rather than PRODUCTION (3). PRODUCTION hides the whole Tools menu, and the Designer lives there. Settings-only, instantly reversible, no code. Does not block." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>Loading a plan is not consenting to be driven by it</h1>
+
+<p class="lede">The burner handover is not a bug — it is three separately reasonable settings composing into an automatic one. Each was designed on its own; nothing in the UI shows they add up. This is the design principle that fixes it, the one-flag version of the fix, and the built-in answer to simplifying the UI.</p>
+
+<h2>What actually happens, in order</h2>
+
+<p>Derived Aug 6, 2026 from this install's settings and the 4.2.1 source. Re-derive the settings half with:</p>
+<pre><code>python3 -c "import plistlib;d=plistlib.load(open('$HOME/Library/Preferences/org.artisan-scope.Artisan.plist','rb'));print({k:d[k] for k in d if 'PID' in k or 'background' in k.lower()})"</code></pre>
+
+<table>
+  <tr><th>#</th><th>Setting</th><th>This install</th><th>Artisan default</th><th>Effect</th></tr>
+  <tr><td>1</td><td><code>loadpidfrombackground</code></td><td><strong>True</strong></td><td>False</td><td>Loading a background overwrites Kp, Ki, Kd, PID source and lookahead from the file (<code>main.py:14429</code>).</td></tr>
+  <tr><td>2</td><td><code>svMode</code></td><td><strong>2</strong></td><td>0</td><td>2 = "Follow (background profile)" (<code>pid_control.py:1197</code>). The setpoint tracks the background curve (<code>:1680</code>).</td></tr>
+  <tr><td>3</td><td><code>pidOnCHARGE</code></td><td><strong>True</strong></td><td>False</td><td><strong>The PID switches itself on at CHARGE</strong> (<code>canvas.py:14426</code>) — no button, no prompt.</td></tr>
+  <tr><td>4</td><td><code>pidOffDROP</code></td><td>True</td><td>False</td><td>And off again at DROP.</td></tr>
+</table>
+
+<p>Read as a sequence: <strong>load a background → its tuning silently replaces yours → the setpoint starts following its curve → and the moment you mark CHARGE, the controller takes the burner.</strong> Three of those four are not Artisan defaults; this install turned them on. Each is defensible alone. Together they mean the act of opening a file decides who drives the roast.</p>
+
+<p>That is exactly the reported symptom — <em>"auto burner when background is loaded … that accidentally switches control"</em> — and it is worth being precise about the trigger: <strong>the handover happens at CHARGE, not at load.</strong> Loading the file arms it; charging the beans fires it. That gap is why it feels accidental. By the time control changes hands, the file was opened minutes ago and is no longer on your mind.</p>
+
+<h2>The principle</h2>
+
+<blockquote><p><strong>Loading a plan is a reference action. Engaging the controller is a control action. A reference action must never become a control action on its own.</strong></p></blockquote>
+
+<p>Everything below follows from that one line. A background profile is a <em>reference</em> — the shape you are trying to hit. Wanting to see it is not the same as wanting a controller to chase it, and the UI currently offers no way to say one without eventually getting the other.</p>
+
+<h2>The elegant fix is one flag</h2>
+
+<p>It is tempting to redesign the whole PID dialog. It is not necessary. <strong>Of the four settings, exactly one converts a loaded plan into a moving burner: <code>pidOnCHARGE</code>.</strong></p>
+
+<ul>
+  <li>With it off, everything else stays <em>inert</em>. The background loads, its tuning is there, the setpoint would follow it — and nothing acts until you press the control on. You keep the whole "follow the background" workflow and lose only the surprise.</li>
+  <li>With it on, no amount of UI polish removes the trap, because the trigger is a roast event rather than a user action.</li>
+</ul>
+
+<p>This is a settings change, not code. It is instantly reversible. It restores Artisan's own default. <strong>Do this first, and evaluate whether anything else is still wanted afterwards</strong> — the remaining items may well stop mattering.</p>
+
+<h2>Then: four hidden flags become one visible action</h2>
+
+<p>The deeper design problem is that background loading has <strong>four independent always-on flags</strong>, none of which announce themselves at the moment they fire:</p>
+
+<table>
+  <tr><th>Flag</th><th>Silently overwrites</th></tr>
+  <tr><td><code>loadpidfrombackground</code></td><td>PID tuning</td></tr>
+  <tr><td><code>loadRampSoakFromBackground</code></td><td>Ramp/soak programme</td></tr>
+  <tr><td><code>loadalarmsfrombackground</code></td><td>Alarms — and upstream's own comment warns this "would overload the one of the foreground profile"</td></tr>
+  <tr><td><code>phasesfromBackgroundflag</code></td><td>Phase boundaries</td></tr>
+</table>
+
+<p>Four checkboxes in three different dialogs, each meaning "when I open a file, let it change my machine's behaviour". Nobody holds that model in their head while loading a profile.</p>
+
+<p><strong>Proposal: replace them with one explicit action.</strong> Loading a background always loads <em>the curve</em>. Applying its settings becomes a button — "Apply this background's settings" — that says what it will overwrite and does it once, when pressed. One action, visible, at the moment of intent, instead of four invisible ones firing at the moment of file-open.</p>
+
+<p>This is strictly less code than it sounds: the four <code>loadXFromProfile</code> functions already exist and already do the work. The change is <em>when</em> they are called, not what they do.</p>
+
+<h2>Simplifying the UI: Artisan already did it</h2>
+
+<p>Artisan ships three UI modes (<code>main.py:1353</code>), and this install is on the busiest one:</p>
+
+<table>
+  <tr><th>Mode</th><th>Value</th><th>Behaviour</th></tr>
+  <tr><td>EXPERT</td><td>1 — <strong>current setting</strong></td><td>Everything. Analyze menu, simulator, wheel editor, every LCD and slider entry.</td></tr>
+  <tr><td>DEFAULT</td><td>2 — <strong>recommended</strong></td><td>Hides the expert-only tools; keeps the Tools menu, so the Designer stays reachable.</td></tr>
+  <tr><td>PRODUCTION</td><td>3</td><td>Hides the Tools menu entirely, plus buttons/sliders/PID-LCD entries unless already in use.</td></tr>
+</table>
+
+<p><strong>Do not jump to PRODUCTION.</strong> <code>create_tools_menu</code> is gated on <code>ui_mode is not UI_MODE.PRODUCTION</code> — the whole Tools menu disappears, and both Designers live in it. For a roastery that designs profiles, PRODUCTION removes the wrong things.</p>
+
+<p>DEFAULT is one settings change, no code, instantly reversible, and it is the honest first move: <strong>find out how much of the clutter is Artisan being complex versus this install being set to EXPERT.</strong> Only design new UI for whatever still annoys after that.</p>
+
+<h2>If more is wanted after those three changes</h2>
+
+<p>Listed in order of value, none of them started:</p>
+
+<ul>
+  <li><strong>One unambiguous "who is driving" indicator.</strong> Control state is currently spread across the CONTROL button, the PID LCDs, the slider positions and two dialogs. One persistent readout — <em>burner: manual</em> / <em>burner: PID following background</em> — would have made this whole class of confusion visible the first time it happened. This is the highest-value UI addition here, and the only one that would have prevented the original complaint.</li>
+  <li><strong>Announce automatic transitions.</strong> If <code>pidOnCHARGE</code> is ever wanted again, it should say so in the message line when it fires. Silent handover is the actual defect; automatic handover is only a defect because it is silent.</li>
+  <li><strong>Hide what this machine cannot do.</strong> This roaster reports no <code>HS</code> and no event flags (<a href="kaleido-machine-adaptations.html">Findings 2 and 3</a>), so any UI bound to them is dead weight on this install.</li>
+</ul>
+
+<h2>What was verified, and what was not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026:</strong> all four settings values read from this install's plist; the four load-flag call sites in <code>main.py</code>; <code>svMode</code>'s meaning and its Follow-Background branch; the <code>pidOnCHARGE</code> trigger in <code>canvas.py:14426</code>; the three UI modes and the PRODUCTION gate on the Tools menu. Line numbers against <code>fb2703f89</code>.</li>
+  <li><strong>Not verified — and it matters:</strong> none of this has been watched happening. The chain was traced by reading code and settings, not by loading a background and charging. <em>The cheap confirmation is to load a background, mark CHARGE with no beans and no heat, and see whether the PID turns itself on.</em> Do that before changing anything, so the fix can be shown to have fixed something.</li>
+  <li><strong>Not established:</strong> whether the owner wants the background's settings <em>available</em> or simply <em>gone</em>. The recommendation assumes available-on-request; the second decision asks directly.</li>
+  <li><strong>Out of scope here:</strong> whether the PID tuning in those background files is any good. Nothing in this spec judges the numbers, only who gets to install them and when.</li>
+</ul>
+
+</body>
+</html>
