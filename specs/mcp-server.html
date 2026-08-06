@@ -6,9 +6,8 @@
   <title>An MCP server inside Artisan, and the four things being outside it costs</title>
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/mcp_server.py src/artisanlib/main.py src/requirements.txt src/artisan-mac.spec" />
+  <meta name="spec-needs" content="control-handover-and-ui" />
   <meta name="spec-decision" content="Transport: streamable-http on 127.0.0.1, not SSE. SSE is the deprecated MCP transport and Artisan would carry it forever. Does not block — recommended default, build it unless overruled." />
-  <meta name="spec-decision" content="Should the MCP be able to mark CHARGE/DROP and press START/OFF in Artisan? Recommended yes, via the existing markChargeSignal/markDropSignal Qt signals — this is the single largest thing the external bridge cannot do. Does not block Phase A." />
-  <meta name="spec-decision" content="Retire ~/Documents/artisan-mcp once Phase B ships? Recommended yes — two control paths to one serial port is a footgun, and the external bridge only exists to work around being outside the app. Blocks nothing; decide before Phase B." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -44,6 +43,40 @@
 </table>
 
 <p>Cost 1 is the one that justifies the fork. The others are annoyances; that one is a capability ceiling.</p>
+
+<h2>Decided by the owner, Aug 6, 2026</h2>
+
+<div class="callout">
+<h4>Yes — the MCP may mark CHARGE/DROP and press START/OFF</h4>
+<p>Both as recommended. This is the capability that justifies the fork, and the plumbing it needs <strong>already exists and is already thread-safe</strong> — verified in <code>canvas.py</code>:</p>
+<table>
+  <tr><th>Capability</th><th>Signal</th><th>Line</th></tr>
+  <tr><td>CHARGE / DRY END / FCs / DROP</td><td><code>markChargeSignal</code>, <code>markDRYSignal</code>, <code>markFCsSignal</code>, <code>markDropSignal</code> — all <code>pyqtSignal(bool)</code></td><td>223–230</td></tr>
+  <tr><td>ON / OFF (sampling)</td><td><code>onMonitorSignal</code>, <code>toggleMonitorSignal</code></td><td>232–233</td></tr>
+  <tr><td>START / STOP (recording)</td><td><code>toggleRecorderSignal</code></td><td>234</td></tr>
+</table>
+<p><code>onMonitorSignal</code> is connected with an explicit <code>Qt.ConnectionType.QueuedConnection</code> (<code>canvas.py:2622</code>) — it was built to be emitted from another thread. The rest default to <code>AutoConnection</code>, which is queued when the emitter is on a different thread, so all of them are safe from the MCP's server thread. <strong>No new plumbing is needed; the MCP emits what Artisan's own sampling thread already emits.</strong></p>
+
+<p><strong>One guard this creates, and it is not optional.</strong> <code>OFF</code> stops sampling, which drops Artisan's connection and <em>releases the serial port</em>. Called mid-roast it ends the recording and unhooks the roaster. So:</p>
+<ul>
+  <li><code>OFF</code> and <code>STOP</code> must refuse while a roast is in progress (CHARGE marked, DROP not) unless explicitly forced, and say why.</li>
+  <li>Event marks are one-way. <code>mark_roast_event</code> must refuse to re-mark a milestone already set — Artisan's own handler guards on <code>timeindex[n] == 0</code> for exactly this reason, and the MCP should not be the thing that bypasses it.</li>
+  <li>None of these are actuator writes, so they are <em>not</em> gated by <code>roast_arm</code>. Arming is about heat. Pressing OFF is about the recording, and conflating them would train the operator to arm for things that do not need it.</li>
+</ul>
+<p>This lesson is already paid for: on Aug 6 the external bridge held the serial port across a topic change and Artisan was locked out of its own roaster mid-roast. A tool that can drop the connection deliberately needs the guard the bridge lacked.</p>
+</div>
+
+<div class="callout">
+<h4>Yes — retire <code>~/Documents/artisan-mcp</code> once Phase B ships</h4>
+<p>As recommended. Two control paths to one serial port is a footgun, and the external bridge exists only to work around being outside the app. Concretely, <strong>Phase B is not done until the bridge is gone</strong>:</p>
+<ul>
+  <li>Stop and remove the daemon, and delete the <code>.mcp.json</code> entry pointing at it, so no session can start it by habit.</li>
+  <li>Port <code>safety.py</code> across first — it is the piece with real test coverage, and it must not be lost with the repository.</li>
+  <li>Keep <code>doctor</code>, or its logic, somewhere. It diagnosed the wedged CP210x that no amount of application-level code could work around, and that failure will recur.</li>
+  <li>Keep the audit log format. It is the only record that a write was ever attempted.</li>
+</ul>
+<p>Until Phase B ships the bridge stays as-is: it is the only working control path, and it has been driven against the real machine.</p>
+</div>
 
 <h2>The transport is forced, and it is not stdio</h2>
 
@@ -108,8 +141,9 @@
 <h3>B — Actuators, with the ported guard</h3>
 <p>Move <code>safety.py</code> in unchanged. Add <code>set_heater</code> / <code>set_fan</code> / <code>set_drum</code> / <code>set_machine_pid</code> / <code>emergency_stop</code> / <code>roast_arm</code> / <code>roast_disarm</code>, each writing through <code>aw.kaleido.send_msg</code>. The unit is now known for free from <code>qmc.mode</code>, so the fail-closed branch the external bridge needs (refusing heat when the unit is unknown) can be deleted rather than ported — but delete it <em>knowingly</em>, with a comment saying why it is safe here and was not there.</p>
 
-<h3>C — Roast events and the profile</h3>
-<p>The reason for the fork. <code>mark_roast_event</code> via the mark*Signal signals — real CHARGE and DROP, not sid bit-fiddling. Then read access to the background profile and phases so Claude can answer "am I ahead of the reference at this point in the roast", which is the actual question a roaster asks.</p>
+<h3>C — Roast events, session control, and the profile</h3>
+<p>The reason for the fork, and now scoped by the owner's Aug 6 decision. <code>mark_roast_event</code> via the mark*Signals — real CHARGE and DROP, not sid bit-fiddling — plus <code>roast_start</code> / <code>roast_stop</code> over <code>toggleRecorderSignal</code> and <code>onMonitorSignal</code>/<code>toggleMonitorSignal</code>, with the mid-roast guard above. Then read access to the background profile and phases so Claude can answer "am I ahead of the reference at this point in the roast", which is the actual question a roaster asks.</p>
+<p>Note the ordering constraint this creates with <a href="control-handover-and-ui.html">control-handover-and-ui</a>: marking CHARGE is exactly the event that fires <code>pidOnCHARGE</code>. Until that flag is settled, <strong>giving the MCP the ability to mark CHARGE gives it the ability to hand the burner to the PID as a side effect</strong> — through a tool whose name says nothing about heat. Settle <code>pidOnCHARGE</code> first.</p>
 
 <h3>The licence changed under this spec, and it lands on exactly this feature</h3>
 
