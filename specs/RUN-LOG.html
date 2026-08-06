@@ -30,6 +30,21 @@
 
 <p><strong>The merge also invalidated the first draft of a spec.</strong> <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> was written describing a clean slate; the merge showed a Kaleido adaptation already shipped in 2025 (BT-only mode). Finding 5 was added, and with it the discovery that its <code>et_offset = -50.0</code> carries no unit while this Artisan runs in Fahrenheit.</p>
 
+<h3>Aug 6, 2026 (later) — the merge was actually run</h3>
+
+<p>The previous entry's "left unverified" is now largely closed. A Python 3.13.15 environment was built (<code>.venv313</code>, all 59 pinned deps clean) and the merged branch was exercised for the first time.</p>
+
+<ul>
+  <li><strong>Test suite: 2359 passed, 11 failed</strong> — and the same 11 fail identically on pristine <code>upstream/master</code> (<code>qcheckcombobox</code>, <code>roastlog</code>, <code>roastpath</code>). Failure lists diffed byte-for-byte: <strong>the merge introduces zero regressions.</strong></li>
+  <li><strong>The full app runs from source</strong> — <code>artisan 4.2.1</code>, canvas rendering, device reading <em>Kaleido Serial 100g</em>, settings loaded. That it starts at all is the proof that the merge's <code>standaloneDesignerAction</code> fix works: the fork's original <code>self.ToolkitMenu.addAction()</code> would have raised <code>AttributeError</code> during startup.</li>
+  <li><strong>The standalone Profile Designer runs</strong> — <code>python launch_profile_designer.py</code> opens <em>Artisan Roast Profile Designer</em> with every 2025 feature intact: BT-Only Mode, the Smoothness control, the unified Events/Alarms panel, the landmark table, and both curves plotted with annotations. The auto-merged <code>designer.py</code> is sound.</li>
+  <li><strong>Second-instance behaviour</strong>: launching from source while the installed app runs gives <code>artisanviewer</code>, not the full app. Quit the installed Artisan first or the Tools menu is not there to test.</li>
+</ul>
+
+<p><strong>Cost:</strong> running <code>pytest test/</code> against a live <code>HOME</code> wrote into the owner's real preferences — <code>test_main.py:3196</code> uses a bare <code>QSettings()</code>. It deleted seven window-geometry keys, reset <code>starts</code>, and left two test keys behind. Repaired from a backup taken beforehand (all 7 keys restored, junk deleted, device config never affected). <code>CLAUDE.md</code> now carries the isolated-<code>HOME</code> invocation.</p>
+
+<p><strong>Still not verified:</strong> the in-app Tools ▸ Designer and the PID dialog have not been opened — driving menus needs Accessibility permission this shell does not have. And no write has ever been sent to the physical roaster.</p>
+
 <p><strong>Left unverified, deliberately:</strong> nothing in the merge has been executed. Artisan 4.2.x needs Python 3.11+ and the repo <code>venv/</code> is 3.9, so neither the app nor its test suite ran against it. The auto-merged <code>designer.py</code> (2178 lines, from two independent extractions of the same original code) parses but has never been opened. And no write of any kind has ever been sent to the physical roaster.</p>
 
 </div>

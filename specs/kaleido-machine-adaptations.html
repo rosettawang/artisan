@@ -87,6 +87,10 @@ stty: tcsetattr: Invalid argument
 
 <p>So a profile designed in Fahrenheit with BT-only mode on gets an ET curve 50 °F below BT, where the design intent reads as 50 °C below BT — about half the gap, and the generated channel is written into the exported <code>.alog</code>.</p>
 
+<p><strong>Confirmed visually Aug 6, 2026</strong>, by launching the designer from source on Python 3.13 (<code>python launch_profile_designer.py</code>). It is not only the constant — <strong>the entire designer is hardcoded to Celsius</strong> and ignores <code>qmc.mode</code>: the landmark table headers read <code>BT (°C)</code> and <code>ET (°C)</code> (<code>designer.py:1560</code>, <code>:1562</code>), and the chart's y-axis is labelled <code>Temperature (°C)</code> (<code>designer.py:1227</code>). The default landmarks it opens with are Celsius values too — CHARGE 80, DRY_END 150, FC_START 190, DROP 210 — which are sane in °C and meaningless in °F. Meanwhile <code>Mode = 'F'</code> in the owner's settings and every roast in the log is in Fahrenheit.</p>
+
+<p>So the mismatch is wider than <code>et_offset</code>: a Fahrenheit roaster typing Fahrenheit numbers into fields labelled °C gets a curve that is internally consistent and mislabelled, and an exported <code>.alog</code> whose unit is whatever the importer assumes. The <code>-50</code> offset is one symptom of a designer that was written in Celsius and never taught about the app's mode.</p>
+
 <p><em>Proposed change:</em> make the offset unit-aware — either scale it by the active mode, or label the input field with the unit and store what the user typed. <strong>Not yet established</strong> which is right, because it is not established what the ET channel is <em>for</em> here: if it exists only to satisfy the two-channel <code>.alog</code> format, the offset barely matters and a label is enough; if it is used as a reference curve while roasting, it matters a lot. Answer that before changing the number.</p>
 
 <h2>Finding 6 — upstream has been fixing this machine's driver, and the fork was missing all of it</h2>
