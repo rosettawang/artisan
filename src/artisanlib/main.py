@@ -1451,7 +1451,7 @@ class ApplicationWindow(QMainWindow):
         'eventsAction', 'alarmAction', 'phasesGraphAction', 'StatisticsAction', 'WindowconfigAction', 'colorsAction', 'themeMenu', 'autosaveAction',
         'batchAction', 'temperatureConfMenu', 'FahrenheitAction', 'CelsiusAction', 'languageMenu', 'analyzeMenu', 'fitIdealautoAction',
         'analyzeMenu', 'fitIdealx2Action', 'fitIdealx3Action', 'fitIdealx0Action', 'fitBkgndAction', 'clearresultsAction', 'roastCompareAction',
-        'simulatorAction', 'wheeleditorAction', 'transformAction', 'temperatureMenu', 'ConvertToFahrenheitAction',
+        'designerAction', 'standaloneDesignerAction', 'standalone_designer_window', 'simulatorAction', 'wheeleditorAction', 'transformAction', 'temperatureMenu', 'ConvertToFahrenheitAction',
         'ConvertToCelsiusAction', 'controlsAction', 'readingsAction', 'eventsEditorAction', 'buttonsAction', 'slidersAction', 'scheduleAction', 'lcdsAction', 'deltalcdsAction',
         'pidlcdsAction', 'scalelcdsAction', 'extralcdsAction', 'phaseslcdsAction', 'fullscreenAction', 'newRoastAction', 'loadSettingsAction', 'openRecentSettingMenu',
         'saveAsSettingsAction', 'resetAction', 'messagelabel', 'button_font_size_pt', 'button_font_size', 'button_font_size_small', 'button_font_size_small_selected',
@@ -12073,7 +12073,7 @@ class ApplicationWindow(QMainWindow):
         self.curvesAction.setEnabled(True)
         self.analyzeMenu.setEnabled(True)
         self.roastCompareAction.setEnabled(True)
-        # Old designer action removed
+        self.designerAction.setEnabled(True)
         self.simulatorAction.setEnabled(True)
         self.wheeleditorAction.setEnabled(True)
         self.transformAction.setEnabled(True)
@@ -12169,7 +12169,10 @@ class ApplicationWindow(QMainWindow):
             self.roastCompareAction.setEnabled(False)
         else:
             self.roastCompareAction.setEnabled(True)
-        # Old designer action removed - no longer needed
+        if not designer:
+            self.designerAction.setEnabled(False)
+        else:
+            self.designerAction.setEnabled(True)
         self.simulatorAction.setEnabled(False)
         if not wheel:
             self.wheeleditorAction.setEnabled(False)

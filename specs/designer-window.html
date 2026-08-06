@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Designer notes, triaged — a third of them are already built</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/designer.py src/artisanlib/canvas.py" />
+  <meta name="spec-needs" content="kaleido-machine-adaptations" />
+  <meta name="spec-decision" content="Which designer do these fixes land in — upstream's in-app Designer (canvas.py + designerconfigDlg) or the fork's standalone Profile Designer? Recommended: the standalone one. It is the fork's own file, so no merge conflicts, and it already has draft save/load and the events panel. Cost: it is Celsius-only and must be taught the app's mode first. BLOCKS everything below — the same fix in the wrong window is wasted work." />
+  <meta name="spec-decision" content="Replace the designer's default landmarks with the owner's bay-nut numbers? Recommended yes. Today's defaults are coffee in Celsius (CHARGE 80, DRY_END 150, FC_START 190, DROP 210) and the owner roasts bay nuts in Fahrenheit with cracks at 217-218 and 228-231. Every new profile currently starts by being wrong twice — wrong product, wrong unit. Does not block." />
+  <meta name="spec-decision" content="What are 'fig 1' and 'fig 2', and which button turns one into the other? The images did not survive with the notes, so this item cannot be specified. Recommended: drop it unless the owner can reproduce the screenshots. Does not block the rest." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>The Designer notes, triaged — a third of them are already built</h1>
+
+<p class="lede">Twelve Designer complaints, a PID request and a hardware question, written against a 2025 Artisan and handed over on Aug 6, 2026. Checked one by one against the merged 4.2.1 tree: four are already shipped, one was built and deleted the same day, two have a single shared root cause, and one cannot be specified because its screenshots are missing.</p>
+
+<h2>Read this before fixing anything: there are two designers</h2>
+
+<p>Every item below has to be aimed at one of two different pieces of code, and they behave differently:</p>
+
+<table>
+  <tr><th></th><th>In-app Designer</th><th>Standalone Profile Designer</th></tr>
+  <tr><td>Where</td><td><code>canvas.py</code> (<code>designerinit</code>, the drawing logic) + <code>designerconfigDlg</code> in <code>designer.py</code></td><td><code>StandaloneDesignerWindow</code> in <code>designer.py</code>, launched by <code>launch_profile_designer.py</code></td></tr>
+  <tr><td>Whose</td><td>Upstream's. Byte-identical to <code>upstream/master</code>.</td><td>The fork's, added 2025.</td></tr>
+  <tr><td>Temperature unit</td><td><strong>Mode-aware.</strong> <code>designerinit</code> branches on <code>self.mode</code> and has full °C and °F default sets.</td><td><strong>Celsius only.</strong> Headers <code>BT (°C)</code>/<code>ET (°C)</code>, y-axis <code>Temperature (°C)</code>, Celsius defaults — <code>qmc.mode</code> is never consulted.</td></tr>
+  <tr><td>Draft editing</td><td>Save/Load Points as <code>.adsg</code> (<code>canvas.py:17894</code>).</td><td>Save Draft / Load Draft as <code>.adsg</code> (<code>designer.py:1989</code>).</td></tr>
+  <tr><td>Merge risk</td><td>High — shared with upstream, conflicts on every pull.</td><td>None — upstream does not have this file's contents.</td></tr>
+</table>
+
+<p>The recommendation is in the decision meta: <strong>put the work in the standalone window</strong>, and pay the one-off cost of teaching it the app's mode first. Fixing the in-app designer means fighting upstream forever, on a fork whose whole strategy is cheap rebases. But note the irony to be resolved first — the one that is <em>wrong</em> about units is the one recommended, because the one that is right about units is the one that is expensive to touch.</p>
+
+<h2>Already built — do not spend time on these</h2>
+
+<table>
+  <tr><th>Note</th><th>Status</th></tr>
+  <tr><td><strong>1.5</strong> "Designer needs to be a new window"</td><td><strong>Shipped 2025.</strong> <code>StandaloneDesignerWindow</code>, its own <code>QMainWindow</code>, verified running Aug 6, 2026 at 1200×828.</td></tr>
+  <tr><td><strong>1.8</strong> "Add alarm and add event buttons"</td><td><strong>Shipped 2025.</strong> The standalone window has a combined <em>Events&nbsp;Alarms</em> panel — Trigger (Time/…), Action (Air Flow/…), value, Add.</td></tr>
+  <tr><td><strong>1.10</strong> "Make alogs where you don't toggle ET"</td><td><strong>Shipped 2025</strong> as Bean Temperature Only Mode — hides ET controls and generates ET from BT. But see <a href="kaleido-machine-adaptations.html">Finding 5</a>: it does so with a unit-blind <code>-50</code> offset.</td></tr>
+  <tr><td><strong>1.11</strong> "cmd s saves a .alog, should be .adsg so you can keep editing"</td><td><strong>Addressed.</strong> Both designers now save points as <code>.adsg</code> and load them back. What is <em>not</em> done is binding it to ⌘S — see 1.12.</td></tr>
+  <tr><td><strong>PID</strong> "Set burner max on pid controller"</td><td><strong>Built 2025, deleted Aug 6 2026</strong> at the owner's instruction. Upstream already ships a <code>dutyMax</code> spin box that caps at any value, not just 80%. See <a href="kaleido-machine-adaptations.html">Finding 7</a>.</td></tr>
+</table>
+
+<h2>1.1 and 1.4 are the same bug, and it is diagnosable</h2>
+
+<p>The reports: <em>"designerinit hardcodes DROP to 13:00 … overwriting your input of 60:00"</em>, <em>"whenever I click apply it reverts the curve back to defaults when I try setting anything over 18, but it works for 17 minutes"</em>, and <em>"clicking enter leads to restoring defaults"</em>.</p>
+
+<p>Both halves are confirmed, and the 17-versus-18 detail is the clue that identifies the mechanism. From <code>canvas.py:17935</code>:</p>
+
+<pre><code>#CH, DE,    FCs,    FCe,     SCs,     SCe,       Drop,    COOL
+self.designertimeinit = [0, 4*60, 9*60, 11*60, 12*60, 12.5*60, 13*60, 17*60]
+</code></pre>
+
+<p>DROP defaults to <code>13*60</code> = 13:00, exactly as reported — <strong>and COOL defaults to <code>17*60</code> = 17:00.</strong> Then <code>settimes()</code> (<code>designer.py:350</code>) runs two validations before applying anything, and <em>returns early</em> on either failure:</p>
+
+<ul>
+  <li><code>validatetime()</code> — format check.</li>
+  <li><code>validatetimeorder()</code> — <strong>times must be strictly ascending.</strong> Fail and it shows "Times need to be in ascending order" and returns, applying nothing.</li>
+</ul>
+
+<p>So entering a DROP of 18:00 or more puts DROP <em>after</em> the COOL default of 17:00, the order check fails, and every field is left holding its previous value. 17:00 works because it still fits under COOL. Nothing is being "reset to defaults" — <strong>the edit is being silently refused, and the untouched defaults are what you are looking at.</strong> Individual fields have a second, quieter version of the same behaviour: each <code>except</code> branch does <code>self.EditN.setText(self.EditNcopy)</code>, restoring the old text on any parse failure.</p>
+
+<p><em>Fix:</em> the defaults must scale to the roast being designed rather than being fixed constants, and a refused apply must say <em>which</em> pair is out of order rather than reverting silently. This is one change, not two, and it closes 1.1, 1.4 and most of 1.3.</p>
+
+<h2>Genuinely unbuilt</h2>
+
+<table>
+  <tr><th>Note</th><th>Finding</th></tr>
+  <tr><td><strong>1.2</strong> Shorter <code>.alog</code> intervals so the file is smaller</td><td>Sample spacing is <code>qmc.delay</code> (<code>canvas.py:617</code>), the live sampling interval — a designed profile has no sampling, so its point count comes from how the curve is interpolated on export. <strong>Needs measuring before it is specified:</strong> export one profile and count points. Note the request is self-contradictory as written — <em>shorter</em> intervals mean <em>more</em> points and a <em>bigger</em> file. Presumably "longer intervals, smaller file" is meant.</td></tr>
+  <tr><td><strong>1.3</strong> Designer time range should match the roast</td><td>Real, and mostly falls out of the 1.1 fix. The axis today comes from the defaults, not from the profile being designed.</td></tr>
+  <tr><td><strong>1.6</strong> "Cannot make a roast greater than 99 minutes, set limit to 3 hours"</td><td><strong>Probably already fixed upstream.</strong> The time validator is <code>^-?[0-9]?[0-9]?[0-9][:,h][0-5][0-9]$</code> (<code>designer.py:204</code>) — three digits of minutes, so 999:59, well past three hours. The 99-minute cap could not be found anywhere in 4.2.1. <em>Re-test before building anything;</em> these notes predate 433 upstream commits.</td></tr>
+  <tr><td><strong>1.7</strong> Undo/redo for drawing</td><td>Real — no undo machinery exists in <code>designer.py</code>. Note the requested keys are ⌘Z and ⌘X; ⌘X is Cut. Standard redo is ⌘⇧Z, and that is what this should use unless the owner insists.</td></tr>
+  <tr><td><strong>1.9</strong> ".adsg → .alog by clicking Designer in the toolbar"</td><td>Needs restating. Both designers already export <code>.alog</code>; what is unclear is whether this asks for a <em>toolbar button</em> that converts without opening the editor. Treat as blocked on clarification, not as work.</td></tr>
+  <tr><td><strong>1.12</strong> ⌘S saves points, ⌘⇧S saves as</td><td>Real and small. The save paths exist; only the shortcuts are missing. Pairs naturally with 1.11.</td></tr>
+  <tr><td><strong>Background controller</strong> open beside the main page</td><td>Under-specified. Artisan has a background profile concept already; whether this means a non-modal window for it, or something else, cannot be told from one line. Blocked on clarification.</td></tr>
+  <tr><td><strong>fig 1 / fig 2</strong> "this button turns fig 1 into fig 2"</td><td>Unspecifiable — the images did not survive with the notes. See the decision.</td></tr>
+</table>
+
+<h2>The roast data in these notes should become the defaults</h2>
+
+<p>The notes carry real observations from the owner's roasting, and they are worth keeping somewhere durable because they contradict what the designer assumes:</p>
+
+<blockquote>
+<p>High air flow before this. Pops at 216. Lower air flow by 260 to save energy. By 320 it's significantly less bitter.</p>
+<p>Cracks 217–218 and 228–231. Nutty musk at 220. 233 green is coming out.</p>
+<p>Roast 0.675&nbsp;kg with 9mm/11mm post-dry, end bean temp 370.</p>
+</blockquote>
+
+<p>These are <strong>Fahrenheit</strong> — consistent with <code>Mode = 'F'</code> and with the 31 roasts in the owner's log, which end between 341 °F and 362 °F. They are also <strong>bay nuts, not coffee</strong>.</p>
+
+<p>The standalone designer opens every new profile at CHARGE 80, DRY_END 150, FC_START 190, DROP 210 — coffee landmarks, in Celsius. For this roastery every one of those numbers is wrong twice over. Two crack ranges (217–218 and 228–231) also suggest the single FC_START/FC_END pair does not describe this product well; that is worth a conversation before the defaults are simply swapped.</p>
+
+<p><em>Note the batch size:</em> 0.675 kg, against a UI currently reading 100 g. Whatever these fixes touch, do not assume the batch size shown is the batch size roasted.</p>
+
+<h2>Not a software problem</h2>
+
+<p><em>"The drum won't stay on less than 40 and stay on heat. Is this a mechanical issue?"</em></p>
+
+<p>Cannot be answered from here, and it is not safe to guess: <strong>no write has ever been sent to this machine</strong>, so nothing in this repo has ever commanded the drum. Two possibilities worth separating at the roaster — a machine-side interlock that refuses low drum speed while the heater is on (which would be a safety feature, not a fault), or a genuine mechanical stall. Added to the <a href="index.html#hardware-pass">Hardware pass</a>.</p>
+
+<p>Worth knowing: this bridge's own safety limits already assume the former. <code>limits.json</code> carries <code>drum_min: 10</code> and refuses to drop the drum below it while the heater is on. If the machine's own floor is 40, that limit is set too low to be meaningful and should be raised to match reality once measured.</p>
+
+<h2>What was verified, and what was not</h2>
+
+<ul>
+  <li><strong>Verified against the merged tree Aug 6, 2026:</strong> the <code>designerinit</code> defaults, the ascending-order validation and its early return, the field-revert <code>except</code> branches, the three-digit time validator, the absence of any undo machinery, both <code>.adsg</code> save paths, and the Celsius hardcoding in the standalone window. Line numbers are against <code>f3802ed74</code>.</li>
+  <li><strong>Not verified:</strong> the 17-vs-18-minute behaviour was diagnosed by reading, not reproduced by clicking. Driving the dialog needs Accessibility permission this session does not have. <em>Reproduce it before fixing it</em> — the reading is confident but a confident reading is not a repro.</li>
+  <li><strong>Not verified:</strong> whether the 99-minute cap ever existed in the version the notes were written against, or where.</li>
+  <li><strong>Assumed:</strong> that the temperatures in the notes are Fahrenheit. Inferred from <code>Mode = 'F'</code> and the roast log, not stated in the notes themselves.</li>
+</ul>
+
+</body>
+</html>
