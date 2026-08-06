@@ -4,9 +4,9 @@ A fork of [artisan-roaster-scope/artisan](https://github.com/artisan-roaster-sco
 
 ## Branches
 
-- `master` — tracks `upstream/master`. Do not commit fork work here; it exists to be fast-forwarded.
-- `main` — the 2025 fork work (standalone Profile Designer, Kaleido BT-only mode, curve smoothness, cap-burner-output). **Historical.** Merged forward into `mcp-kaleido-adaptations` on Aug 6, 2026 (`738dcd16c`); do not start new work from it.
-- `mcp-kaleido-adaptations` — current work. Carries the merged fork history plus `specs/`.
+- `main` — **the default branch and the only one that matters.** Carries the 2025 fork work (standalone Profile Designer, Kaleido BT-only mode, curve smoothness, cap-burner-output), merged forward onto 4.2.1 on Aug 6, 2026 (`738dcd16c`), plus `specs/`.
+- `master` — **deleted** Aug 6, 2026, locally and on the remote. It only ever mirrored upstream, and `upstream/master` already does that. For a pristine upstream reference use `git fetch upstream && git log upstream/master`.
+- `mcp-kaleido-adaptations` — local-only, points at the same commit as `main`. Redundant; delete when convenient.
 
 Pull upstream *before* starting a phase, not after. Every source file a spec touches is a future conflict, which is why specs declare `spec-touches` and prefer new files to edits.
 
@@ -30,7 +30,7 @@ Pull upstream *before* starting a phase, not after. Every source file a spec tou
 5. **Log the stop** in that spec's `spec-blocker` meta, then run `./specs.sh prune` so the index reflects it.
 6. **Declare each decision separately**, one `spec-decision` meta per choice, stating the recommended answer and whether it blocks. Burying a decision in blocker prose leaves it unfindable.
 
-Verify as you go rather than at the end — but be honest about what verification is available here. The suite needs Python 3.11+, and no test in this repo can tell you whether a burner command did what you expected. That answer only comes from standing at the machine.
+Verify as you go rather than at the end — but be honest about what verification is available here. The suite needs Python 3.12+, and no test in this repo can tell you whether a burner command did what you expected. That answer only comes from standing at the machine.
 <!-- SPEC-PASS:END -->
 
 ## Spec tooling — `./specs.sh`
@@ -51,6 +51,6 @@ This fork can command a burner on a machine holding hot coffee. Non-negotiable:
 
 ## Verifying
 
-Artisan 4.2.x needs **Python 3.11+** (CI runs 3.14). The repo's `venv/` is 3.9 and cannot run it — do not read a passing command in that venv as a passing test.
+Artisan 4.2.x needs **Python 3.12+** — `src/pyproject.toml` declares `requires-python = '>=3.12'` (raised upstream in `6908b688c`, Nov 2025); CI runs 3.14. The repo's `venv/` is 3.9 and cannot run it — do not read a passing command in that venv as a passing test.
 
-A parse check is not a test. `python -c "import ast; ast.parse(...)"` on a 3.11 interpreter also **fails on untouched upstream files**, because they use PEP 695 `type X = ...` syntax. Check against 3.12+ or don't claim it.
+A parse check is not a test. `python -c "import ast; ast.parse(...)"` on a 3.11 interpreter **fails on untouched upstream files**, because they use PEP 695 `type X = ...` syntax — verified against `canvas.py` on Aug 6, 2026. Check against 3.12+ or don't claim it.
