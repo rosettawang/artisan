@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>What this Kaleido actually reports, and the four places Artisan assumes otherwise</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py" />
+  <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
+  <meta name="spec-decision" content="Grey out the Kaleido event-flag checkboxes when the machine has only ever reported sid low-nibble 0? Recommended no — do it as a tooltip note instead. Greying out on observed behaviour is stateful UI that will be wrong on the first machine that reports events late. Does not block." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>What this Kaleido actually reports, and the four places Artisan assumes otherwise</h1>
+
+<p class="lede">Four protocol facts, each measured against the real machine on Aug 6, 2026 — not read out of the driver. Three are harmless to Artisan and dangerous to anything outside it; one is a real usability bug worth fixing upstream.</p>
+
+<h2>The measurement</h2>
+
+<p>Taken with Artisan closed, holding <code>/dev/cu.usbserial-0001</code> directly at 57600 baud. Re-derive with <code>~/Documents/artisan-mcp/doctor</code>, or by hand:</p>
+
+<pre><code>{[PI]}       -&gt; '{0}'
+{[TU]}       -&gt; '{0}'
+{[SN]}       -&gt; '{0}'
+{[RD A0]}    -&gt; '{0,BT:71.2,ET:72.1,AT:71.2,HP:0,FC:0,RC:0,AH:0,TS:32.0}'
+</code></pre>
+
+<p>Machine config, from <code>~/Library/Preferences/org.artisan-scope.Artisan.plist</code>: device 138 (Kaleido BT/ET), <code>kaleidoSerial = True</code>, <code>SerialPort.comport = /dev/cu.usbserial-0001</code>, <code>SerialPort.baudrate = 57600</code>, <code>Mode = 'F'</code>. Adapter is a Silicon Labs CP210x (VID <code>0x10c4</code>). Batch size shown in the UI: 100 g.</p>
+
+<h2>Finding 1 — the temperature unit is write-only</h2>
+
+<p><code>{[TU]}</code> as a bare read returns a bare status frame. The machine accepts <code>{[TU F]}</code> as a set and never reports the unit back.</p>
+
+<p><strong>Artisan is unaffected</strong>, and this is worth stating clearly so nobody "fixes" it: Artisan sends <code>TU</code> from <code>qmc.mode</code> during <code>ws_initialize</code> / <code>serial_initialize</code> and never reads it. It already knows the answer; it is the one telling the machine.</p>
+
+<p>The exposure is entirely outside Artisan. Any process reading this machine's frames without having sent <code>TU</code> itself sees <code>71.2</code> with no unit attached — and a Celsius safety ceiling checked against a Fahrenheit number is a live hazard: 480 °F reads as 480 "°C" (harmlessly conservative), but the reverse mapping is not. The external bridge now fails closed on this (refuses to <em>add</em> heat while the unit is unknown; reducing heat and emergency stop stay available). <strong>An in-app MCP does not need that branch at all</strong> — <code>aw.qmc.mode</code> is authoritative. See <a href="mcp-server.html">mcp-server</a> Phase B.</p>
+
+<p><em>No change to Artisan proposed.</em> This finding exists to stop the fail-closed branch being ported in as cargo, and to stop anyone adding a <code>TU</code> read.</p>
+
+<h2>Finding 2 — <code>sid</code> is always 0, so the event flags are inert here</h2>
+
+<p>Artisan reads roast events out of the low 4 bits of <code>sid</code> (<code>event_flag = _sid &amp; 15</code> in <code>comm.py</code>'s <code>Kaleido_BTET</code>): 1 CHARGE, 3 DRY END, 4 FCs, 5 FCe, 6 SCs, 7 SCe, 8 DROP. This machine has returned <code>sid=0</code> on every frame observed, so <code>_sid &amp; 15 == 0</code> and no flag ever fires.</p>
+
+<p>Consequence, both halves worth knowing:</p>
+<ul>
+  <li><strong>Enabling the Kaleido event flags on this machine does nothing.</strong> All seven default to <code>False</code> (<code>main.py:1822</code>). Turning them on will not make CHARGE auto-mark, and time spent debugging that is wasted.</li>
+  <li><strong>Equally, this machine cannot produce a false CHARGE.</strong> The upstream comment on that code says it plainly — <em>"it remains unclear what those machines exactly report and when"</em> — and a machine reporting a constant <code>sid=1</code> would read as a permanent CHARGE. Ours reports 0. That risk does not apply here.</li>
+</ul>
+
+<p>This was worth measuring precisely because the same trap bit the external bridge's simulator, which used <code>sid=1</code> as its idle status and consequently announced a CHARGE on every poll.</p>
+
+<p><em>Proposed change:</em> a tooltip on the event-flag group in <code>devices.py</code> saying the flags depend on the machine reporting a non-zero low nibble, and that many do not. Cheap, honest, no state. See the decision against greying them out dynamically.</p>
+
+<h2>Finding 3 — no <code>SN</code>, no <code>HS</code></h2>
+
+<p><code>{[SN]}</code> returns a bare frame, and <code>HS</code> never appears in an <code>RD A0</code> response. Both are declared in the <code>State</code> TypedDict, and <code>get_state</code> returns <code>None</code> for <code>SN</code> and <code>-1</code> for <code>HS</code> when unset, so <strong>nothing crashes</strong> — the type assertions in <code>getBTET</code> / <code>getSVAT</code> / <code>getDrumAH</code> / <code>getHeaterFan</code> only cover <code>BT ET TS AT RC AH HP FC</code>, all of which this machine does report.</p>
+
+<p>Two consequences:</p>
+<ul>
+  <li><code>kaleido.py:311</code> logs <code>connected (None)</code> at connect. Cosmetic, but it reads like a failure in a log you are scanning during a bad roast. Proposed: log <code>connected (no serial number reported)</code> when <code>SN</code> is absent.</li>
+  <li><strong>There is no "is the burner actually firing" signal on this machine.</strong> <code>HS</code> is one of the two targets (<code>{'CS','HS'}</code> at <code>main.py:9487</code>) whose IO-command buttons update their state from the machine's response — on this roaster such a button would never light. Heater state must be inferred from <code>HP &gt; 0</code>, which is a <em>commanded</em> value, not a confirmation. Anything that claims to verify the heater is off — including <code>emergency_stop</code> — is reporting an acknowledged command, not an observed state. Say so wherever it is surfaced.</li>
+</ul>
+
+<h2>Finding 4 — the CP210x wedge, and the only bug here worth upstreaming</h2>
+
+<p>Observed live on Aug 6, 2026. The adapter entered a state where the port opened and <code>tcgetattr</code> succeeded, but <strong>every</strong> <code>tcsetattr</code> failed with <code>EINVAL (22)</code> — including writing back byte-identical attributes.</p>
+
+<p>What makes this diagnosable rather than mysterious is that it is not a Python or pyserial fault. The OS cannot configure the port either:</p>
+
+<pre><code>$ stty -f /dev/cu.usbserial-0001 57600
+stty: tcsetattr: Invalid argument
+</code></pre>
+
+<p>Ruled out at the time: pyserial parameters (every combination including bare defaults failed), the <code>/dev/tty.</code> node, sandboxing, port ownership (nothing held it), USB enumeration (present, VID <code>0x10c4</code>), and driver conflicts (<code>IOSerialBSDClient</code> bound normally, no third-party kexts). <strong>Unplugging and replugging the USB cable cleared it completely</strong> and the machine has been healthy since.</p>
+
+<p><em>Proposed change, and the one with real user value:</em> catch <code>EINVAL</code> specifically on serial open and surface <em>"the USB adapter is not accepting configuration — unplug the cable, wait five seconds and plug it back in"</em> instead of a generic serial failure. This is not Kaleido-specific: any Artisan user on a Silicon Labs adapter (Hottop, TC4, MODBUS serial) can hit it, and the generic message sends them to check baud rates, which is exactly wrong. Reference implementation and the full differential is in <code>~/Documents/artisan-mcp/artisan_mcp/doctor.py</code>.</p>
+
+<h2>What is verified and what is not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026, against this physical machine:</strong> all four <code>{[…]}</code> exchanges above, the <code>stty</code> failure and its resolution by replug, and that Artisan 4.2.0 connects and reads BT/ET over serial (observed 71.6 / 72.9 °F in the UI, 71.2 / 72.1 through the bridge minutes apart).</li>
+  <li><strong>Read from source, not observed:</strong> every claim about what Artisan <em>does</em> with these values — the <code>sid &amp; 15</code> decode, the type assertions, the <code>{'CS','HS'}</code> button path, the event-flag defaults. Line numbers are against <code>784effc8</code>.</li>
+  <li><strong>Not verified — no write has ever been sent to this machine.</strong> Not <code>HP</code>, not <code>FC</code>, not <code>RC</code>, not <code>TS</code>. Whether it acknowledges a write with a single-var frame, how fast, and whether it tolerates a write between Artisan's polls are all <em>unmeasured</em>. The first write should be a fan or drum command on a cold empty machine, watched.</li>
+  <li><strong>Unexplained:</strong> <code>TS:32.0</code>. 32 °F is 0 °C, which smells like an unset setpoint rather than a real target, but nothing confirms that. Do not build PID behaviour on an assumption about this value.</li>
+  <li><strong>Unknown:</strong> the Kaleido model. The UI says 100 g; earlier in the same session it said 1 kg, so the batch size is a user field and not a machine identity. With no <code>SN</code>, the machine cannot be identified over the wire at all.</li>
+</ul>
+
+</body>
+</html>

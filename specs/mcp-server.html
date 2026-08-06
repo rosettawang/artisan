@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>An MCP server inside Artisan, and the four things being outside it costs</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/mcp_server.py src/artisanlib/main.py src/requirements.txt src/artisan-mac.spec" />
+  <meta name="spec-decision" content="Transport: streamable-http on 127.0.0.1, not SSE. SSE is the deprecated MCP transport and Artisan would carry it forever. Does not block — recommended default, build it unless overruled." />
+  <meta name="spec-decision" content="Should the MCP be able to mark CHARGE/DROP and press START/OFF in Artisan? Recommended yes, via the existing markChargeSignal/markDropSignal Qt signals — this is the single largest thing the external bridge cannot do. Does not block Phase A." />
+  <meta name="spec-decision" content="Retire ~/Documents/artisan-mcp once Phase B ships? Recommended yes — two control paths to one serial port is a footgun, and the external bridge only exists to work around being outside the app. Blocks nothing; decide before Phase B." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>An MCP server inside Artisan, and the four things being outside it costs</h1>
+
+<p class="lede">A working MCP bridge already exists outside Artisan and was verified against the real roaster on Aug 6, 2026. This spec is not "build an MCP" — it is "move it inside, and delete the parts that exist only to work around being outside."</p>
+
+<h2>Most of this already exists</h2>
+
+<p>Before specifying anything: <code>~/Documents/artisan-mcp</code> is built, tested (102 passing checks across three suites) and has been driven against this roaster. It relays Artisan's Kaleido traffic over a WebSocket shim, injects guarded actuator commands, and exposes eleven MCP tools. The Kaleido protocol codec, the safety interlocks, the arm/disarm model, the audit log and the simulator all work and are <strong>portable as-is</strong>.</p>
+
+<p>So the question this spec answers is narrow: <em>what does being a separate process actually cost, and is that worth a fork?</em> Four things, in descending order of how much they hurt.</p>
+
+<table>
+  <tr><th>Cost of being outside</th><th>Why it exists</th></tr>
+  <tr>
+    <td><strong>1. It cannot see the roast, only the wire.</strong></td>
+    <td>The bridge sees <code>{0,BT:…,ET:…}</code> frames. It has no access to <code>aw.qmc.timeindex</code> (CHARGE / DRY END / FCs / FCe / DROP), the profile, the background curve, phases, or statistics. It can report a temperature; it cannot answer "how long since first crack" or "am I ahead of the background profile" — which is most of what roast judgement is.</td>
+  </tr>
+  <tr>
+    <td><strong>2. It cannot mark events.</strong></td>
+    <td>It fakes them by setting the low 4 bits of <code>sid</code> on a relayed frame. Artisan ignores those unless the Kaleido event flags are enabled (off by default), and per <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> <strong>this machine reports <code>sid=0</code> permanently</strong>, so the flags are inert here regardless. Inside Artisan, <code>markChargeSignal.emit(True)</code> is one line and always works.</td>
+  </tr>
+  <tr>
+    <td><strong>3. It requires reconfiguring a working setup.</strong></td>
+    <td>Artisan must be switched from Kaleido serial to Kaleido WiFi (Config ▸ Device ▸ Networks) pointing at <code>127.0.0.1:8765</code>, and the daemon must own <code>/dev/cu.usbserial-0001</code>. Only one process can hold a serial port, so every start/stop is a two-process handoff. Inside Artisan there is no handoff and no reconfiguration.</td>
+  </tr>
+  <tr>
+    <td><strong>4. It reimplements code Artisan already has.</strong></td>
+    <td><code>artisan_mcp/protocol.py</code> is a second implementation of the framing in <code>artisanlib/kaleido.py</code>. It was written by reading that file, and it will drift from it. Inside Artisan, <code>aw.kaleido.send_msg()</code> and <code>send_request()</code> already exist and are the only implementation.</td>
+  </tr>
+</table>
+
+<p>Cost 1 is the one that justifies the fork. The others are annoyances; that one is a capability ceiling.</p>
+
+<h2>The transport is forced, and it is not stdio</h2>
+
+<p>Every MCP example is stdio. <strong>Artisan cannot use stdio</strong> — it is a GUI application that owns its own stdin/stdout, and there is no parent process launching it as a subprocess. The server must listen on a socket and Claude must connect by URL.</p>
+
+<p>Verified Aug 6, 2026 against <code>mcp==2.0.0</code>: <code>MCPServer</code> exposes <code>run_streamable_http_async</code>, <code>run_sse_async</code> and <code>streamable_http_app</code>. Streamable-HTTP is the recommendation (see decision); SSE is the deprecated transport and a fork would carry it indefinitely.</p>
+
+<p><strong>There is already a precedent in-tree for this exact shape.</strong> <code>artisanlib/weblcds.py</code> runs an aiohttp server on a background thread with its own asyncio loop (<code>WebView</code>, <code>_loop</code> / <code>_thread</code> / <code>_runner</code>), started and stopped from the GUI. Copy that lifecycle rather than inventing one — same threading model, same shutdown discipline, same failure surface.</p>
+
+<pre><code>Claude Code ──HTTP──▶ mcp_server.py (background thread, 127.0.0.1)
+                            │  Qt signals only
+                            ▼
+                     ApplicationWindow (aw)
+                       ├── aw.qmc      timex, temp1/temp2, timeindex, mode
+                       └── aw.kaleido  send_msg / send_request ──serial──▶ roaster
+</code></pre>
+
+<h2>The one rule that will otherwise crash the app</h2>
+
+<p><strong>Every mutation crosses into the GUI thread by Qt signal. No exceptions.</strong> The MCP server runs on a background thread; touching a widget, the matplotlib canvas, or <code>qmc</code> state directly from there is a use-after-free waiting for a busy roast. Artisan already defines the signals this needs — <code>markChargeSignal</code>, <code>markDRYSignal</code>, <code>markFCsSignal</code>, <code>markFCeSignal</code>, <code>markDropSignal</code>, <code>markCoolSignal</code> (see <code>comm.py</code> around the <code>Kaleido_BTET</code> handler, which emits exactly these from the sampling thread for the same reason).</p>
+
+<p>Reads of plain Python attributes (<code>aw.qmc.timex</code>, <code>aw.qmc.mode</code>) are tolerable without a signal; anything that draws, records or actuates is not. When in doubt, emit.</p>
+
+<h2>What ports unchanged from the external bridge</h2>
+
+<ul>
+  <li><code>safety.py</code> — <code>Limits</code>, <code>Guard</code>, arm/disarm with expiry, the airflow interlock, the heater step cap, the BT/ET ceilings, the audit log. Move verbatim; it has the most test coverage and none of it depends on being out-of-process.</li>
+  <li>The tool surface and its docstrings — <code>roast_status</code>, <code>roaster_probe</code>, <code>roast_arm</code>, <code>roast_disarm</code>, <code>set_heater</code>, <code>set_fan</code>, <code>set_drum</code>, <code>set_machine_pid</code>, <code>emergency_stop</code>, <code>mark_roast_event</code>.</li>
+  <li>The <code>INSTRUCTIONS</code> block. It is the operating doctrine ("read status before and after every change", "a refusal is a correct answer").</li>
+</ul>
+
+<p><strong>What does not port:</strong> <code>protocol.py</code> (superseded by <code>aw.kaleido</code>), <code>bridge.py</code>'s WebSocket relay (no longer a relay), <code>roaster.py</code>'s <code>SerialLink</code> (Artisan owns the port), and <code>daemon.py</code>'s Unix socket (no second process). The simulator is worth keeping in some form — see Phase D.</p>
+
+<h2>Dependencies: one line</h2>
+
+<p>Derived from <code>src/requirements.txt</code> on Aug 6, 2026 — re-run <code>grep -nE '^(mcp|aiohttp|websockets|pyserial)' src/requirements.txt</code> to confirm:</p>
+
+<ul>
+  <li><code>pyserial==3.5</code>, <code>websockets==17.0.1</code>, <code>aiohttp==3.14.3</code> — <strong>already dependencies.</strong></li>
+  <li><code>mcp</code> — the only addition. <code>Requires-Python: &gt;=3.10</code>; Artisan's CI runs 3.14 (<code>.github/workflows/mypy.yml</code>), so it is compatible.</li>
+</ul>
+
+<p>PyInstaller will need <code>mcp</code> reachable from <code>src/artisan-mac.spec</code>. Not verified: whether <code>mcp</code>'s pydantic models need a <code>hiddenimports</code> entry. Find out by building, not by reasoning — <code>pyinstaller artisan-mac.spec</code> and launch the bundle.</p>
+
+<h2>Off by default, and bound to loopback</h2>
+
+<p>This server can command a burner. It must not be listening because Artisan happens to be open.</p>
+
+<ul>
+  <li>Default off. A toggle in Config (next to WebLCDs, which has the same character) turns it on for the session.</li>
+  <li>Bind <code>127.0.0.1</code> only, never <code>0.0.0.0</code>. WebLCDs binds broadly on purpose — a phone on the same wifi is the point. This is the opposite: nothing outside the machine should reach it.</li>
+  <li>Arming still gates writes, exactly as in the external bridge. The listen toggle is not the arm.</li>
+</ul>
+
+<h2>Unbuilt roadmap</h2>
+
+<p>Ship each phase before starting the next. Delete this file when all are done.</p>
+
+<h3>A — Read-only server</h3>
+<p><code>src/artisanlib/mcp_server.py</code> on the WebLCDs thread pattern, streamable-HTTP on loopback, Config toggle, one tool: <code>roast_status</code>. It reports what the external bridge could not — elapsed time, <code>timeindex</code> milestones with times, BT/ET/RoR from <code>qmc</code>, the machine actuators from <code>aw.kaleido</code>, and <code>aw.qmc.mode</code> as the authoritative unit. <strong>No writes at all in this phase.</strong> Proves the threading model against a real roast before anything can actuate.</p>
+
+<h3>B — Actuators, with the ported guard</h3>
+<p>Move <code>safety.py</code> in unchanged. Add <code>set_heater</code> / <code>set_fan</code> / <code>set_drum</code> / <code>set_machine_pid</code> / <code>emergency_stop</code> / <code>roast_arm</code> / <code>roast_disarm</code>, each writing through <code>aw.kaleido.send_msg</code>. The unit is now known for free from <code>qmc.mode</code>, so the fail-closed branch the external bridge needs (refusing heat when the unit is unknown) can be deleted rather than ported — but delete it <em>knowingly</em>, with a comment saying why it is safe here and was not there.</p>
+
+<h3>C — Roast events and the profile</h3>
+<p>The reason for the fork. <code>mark_roast_event</code> via the mark*Signal signals — real CHARGE and DROP, not sid bit-fiddling. Then read access to the background profile and phases so Claude can answer "am I ahead of the reference at this point in the roast", which is the actual question a roaster asks.</p>
+
+<h3>D — Simulator device, so none of this needs beans</h3>
+<p>Artisan already ships <code>artisanlib/simulator.py</code>. Wire the MCP tools to work against it so the whole surface can be exercised with no hardware and no fire risk — the role <code>artisan_mcp/roaster.py</code>'s <code>SimulatorLink</code> plays today. Whether Artisan's simulator is rich enough to respond to heater changes is <strong>not verified</strong>; read it before assuming.</p>
+
+<h2>What is verified and what is not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026:</strong> the protocol framing, the safety interlocks, the relay, and event injection — all under test in <code>~/Documents/artisan-mcp/tests/</code>. The real machine answers <code>PI</code> and <code>RD A0</code> over the real serial port through this code.</li>
+  <li><strong>Never done, by anyone, ever:</strong> a write to this roaster from any of this code. No <code>HP</code>, <code>FC</code>, <code>RC</code> or <code>TS</code> command has been sent to the physical machine. Every actuator claim in this spec and in the bridge is inference from <code>artisanlib/kaleido.py</code>, not observation.</li>
+  <li><strong>Not verified:</strong> that Artisan tolerates a second writer on <code>aw.kaleido</code> while its own sampling loop is polling. The external bridge serialises with a lock it owns; in-app, the write queue is <code>aw.kaleido</code>'s. Read <code>send_msg</code>'s queue discipline before Phase B.</li>
+  <li><strong>Not verified:</strong> PyInstaller packaging of <code>mcp</code>.</li>
+</ul>
+
+<h2>Keeping the fork rebaseable</h2>
+
+<p>This is a fork of an active upstream (433 commits arrived between Nov 2025 and Aug 2026). Every file touched is a future merge conflict, so: put everything possible in <strong>one new file</strong> (<code>mcp_server.py</code>), and keep the <code>main.py</code> delta to a menu action plus start/stop calls. Do not refactor upstream code to make the MCP prettier. An upstream PR is unlikely to be accepted — an LLM control surface on a burner is not a general-audience feature — so assume this lives downstream forever and optimise for cheap rebases.</p>
+
+</body>
+</html>
