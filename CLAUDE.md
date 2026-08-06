@@ -53,11 +53,20 @@ This fork can command a burner on a machine holding hot coffee. Non-negotiable:
 
 Artisan 4.2.x needs **Python 3.12+** — `src/pyproject.toml` declares `requires-python = '>=3.12'` (raised upstream in `6908b688c`, Nov 2025); CI runs 3.14. The repo's `venv/` is 3.9 and cannot run it — do not read a passing command in that venv as a passing test.
 
-**Isolate the preferences domain before running the suite.** `test/unitary/artisanlib/test_main.py` constructs a bare `QSettings()` and writes to it — verified Aug 6, 2026, when a plain `pytest test/` put `SomeOtherSetting=keep_this` and `test_group.test_key` into the owner's live `org.artisan-scope.Artisan.plist`, reset `starts` to 0, and deleted every window-geometry key (`Geometry`, `MainWindowState`, `PIDPosition`, `PortsGeometry`, `RoastGeometry`, `BackgroundGeometry`, `DeviceAssignmentGeometry`). Device and roasting settings survived, but that was luck, not design. Back up the plist first, and prefer running with an isolated `HOME`:
+**Back up the preferences plist before running the suite, and restore it after.** `test/unitary/artisanlib/test_main.py` constructs a bare `QSettings()` and writes to it — verified twice on Aug 6, 2026, when `pytest test/` put `SomeOtherSetting=keep_this` and `test_group.test_key` into the owner's live `org.artisan-scope.Artisan.plist`, reset `starts` to 0, and deleted every window-geometry key (`Geometry`, `MainWindowState`, `PIDPosition`, `PortsGeometry`, `RoastGeometry`, `BackgroundGeometry`, `DeviceAssignmentGeometry`). Device and roasting settings survived both times, but that is luck, not design.
+
+**Overriding `HOME` does NOT protect you on macOS** — tried, and it failed identically the second time. `QSettings` goes through `CFPreferences`/`cfprefsd`, a per-user daemon that serves the real preferences domain no matter what `$HOME` says. Only these actually work:
 
 ```
-cp ~/Library/Preferences/org.artisan-scope.Artisan.plist /tmp/artisan-settings-backup.plist
-HOME=$(mktemp -d) .venv313/bin/python -m pytest test/ -q
+# before
+defaults export org.artisan-scope.Artisan /tmp/artisan-prefs.plist
+.venv313/bin/python -m pytest test/ -q
+# after
+defaults import org.artisan-scope.Artisan /tmp/artisan-prefs.plist
+defaults delete org.artisan-scope.Artisan SomeOtherSetting
+defaults delete org.artisan-scope.Artisan test_group.test_key
 ```
+
+`defaults import` merges rather than replaces, so the two junk keys need deleting explicitly. Quit Artisan first — a running instance rewrites settings on exit and will fight the restore.
 
 A parse check is not a test. `python -c "import ast; ast.parse(...)"` on a 3.11 interpreter **fails on untouched upstream files**, because they use PEP 695 `type X = ...` syntax — verified against `canvas.py` on Aug 6, 2026. Check against 3.12+ or don't claim it.

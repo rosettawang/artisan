@@ -771,7 +771,9 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+# backend_qtagg, not backend_qt5agg: the Qt5 shim is deprecated and this app is
+# PyQt6-only. Matches canvas.py:108, which is upstream's own import.
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from typing import Dict, Any
