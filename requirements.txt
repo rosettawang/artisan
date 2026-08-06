@@ -1,3 +1,15 @@
+# ⚠ STALE — DO NOT USE. Snapshot taken in 2025, before this fork merged 433
+# upstream commits. 18 of the 27 packages it shares with the real manifest are
+# pinned to older versions, several by a major release (bleak 0.22 vs 3.0,
+# protobuf 6 vs 7, portalocker 3 vs 4). Installing from this file produces an
+# environment that cannot run Artisan 4.2.x.
+#
+# The real manifest is src/requirements.txt:
+#     python3.13 -m venv .venv313
+#     .venv313/bin/pip install -r src/requirements.txt
+#
+# Kept only so old notes referring to it still resolve. Verified Aug 6, 2026.
+
 # Core dependencies
 # On macOS, system libraries like 'pkg-config' and 'cairo' might be required for some packages (e.g., pycairo, Pillow, matplotlib).
 # Install them using Homebrew before running pip install:

@@ -184,7 +184,7 @@
 <ul>
   <li><strong>The write path is the whole risk, and it is still untouched.</strong> Reads are free and reversible; a burner command is neither. Hardware-pass row 3 gates more than it looks like it does — <strong>no write of any kind has ever reached this roaster</strong>, so every actuator behaviour in both specs is inference from <code>artisanlib/kaleido.py</code>. This is the single largest gap between what this repo claims and what has been observed.</li>
   <li><strong>Nothing is proven against a <em>moving</em> roast.</strong> Updated Aug 6, 2026: the merge itself is now proven — 2359 tests pass with zero regressions, the app and the standalone designer both run from source. What remains unproven is behaviour under heat. Every temperature claim was measured on a machine at room temperature, and the interlocks have never refused a real command during a real roast. Prefer the phases that reach a watched, beanless heated run over the phases that add tools.</li>
-  <li><strong>The fork's diffs contain edits nobody intended.</strong> Removing one feature from <code>pid_dialogs.py</code> turned up three unrelated changes, one a real bug. <code>designer.py</code> (1418 added lines) and <code>main.py</code> have not been audited the same way. Do that before building on either — it is cheap now and expensive after new code sits on top.</li>
+  <li><del><strong>The fork's diffs contain edits nobody intended.</strong> <code>designer.py</code> and <code>main.py</code> have not been audited the same way.</del> <strong>✓ Audited Aug 6, 2026 — clean.</strong> <code>designer.py</code> is a strict superset of upstream's (zero upstream lines lost, verified by <code>git diff upstream/master -- src/artisanlib/designer.py | grep "^-"</code> returning nothing). <code>main.py</code>'s fork delta is coherent, and the merge restored <code>designerAction</code> to <code>__slots__</code> alongside the fork's two additions, with all 3 <code>setEnabled</code> call sites matching upstream. <code>canvas.py</code> and <code>pid_dialogs.py</code> are byte-identical to upstream. <strong>The collateral damage was confined to <code>pid_dialogs.py</code> and is fixed.</strong></li>
   <li><strong>A running bridge owns the roaster.</strong> Learned the hard way (hardware-pass row 2): one process holds the serial port, and if it is not Artisan then Artisan is blind. Never leave the bridge running across a change of topic, and never while anyone might roast.</li>
   <li><strong>Rebase cost compounds.</strong> The longer this fork sits behind upstream, the more each spec's <code>spec-touches</code> hurts — and the 433-commit gap meant roasting on a knowingly-broken Kaleido RoR for months. Pull upstream before starting a phase, not after.</li>
 </ul>
@@ -222,6 +222,12 @@
   <td>(no spec — fork hygiene)</td>
   <td>Removing <code>capBurnerOutputFlag</code> revealed the fork's <code>pid_dialogs.py</code> diff also carried three unintended changes, including <code>C2Widget.setLayout(svlayout)</code> → <code>tab2Layout</code>, the wrong layout on the SV tab.</td>
   <td>All restored; the file is byte-identical to upstream. <strong>Standing rule:</strong> when removing a fork feature, diff the whole file against upstream rather than deleting the feature's own lines. <code>designer.py</code> and <code>main.py</code> have <em>not</em> had this treatment yet.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>(no spec — fork hygiene)</td>
+  <td>The fork's root <code>requirements.txt</code> is a 2025 snapshot: 18 of the 27 packages it shares with <code>src/requirements.txt</code> are pinned older, several by a major release (<code>bleak</code> 0.22 vs 3.0, <code>protobuf</code> 6 vs 7, <code>portalocker</code> 3 vs 4). Installing from it yields an environment that cannot run 4.2.x.</td>
+  <td>Not deleted — old notes refer to it. Given a loud <code>⚠ STALE — DO NOT USE</code> banner pointing at <code>src/requirements.txt</code>. The working env (<code>.venv313</code>) was built from the correct manifest.</td>
 </tr>
 <tr>
   <td>Aug 6, 2026</td>
