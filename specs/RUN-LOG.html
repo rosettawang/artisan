@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="spec-status" content="canonical" />
+<title>Spec run log</title>
+<link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+<div class="internal">Internal planning dashboard — <b>fork-only, never part of an upstream PR</b></div>
+<div class="wrap">
+
+<h1 id="top">Spec run log</h1>
+<p class="lede">Appended as a run goes, one section per spec or per substantive piece of work. Newest at the bottom. The dashboard is <a href="index.html">index.html</a>.</p>
+
+<h2>Entries</h2>
+
+<h3>Aug 6, 2026 — specs/ established, and the fork work brought forward</h3>
+
+<p><strong>Not a spec run.</strong> The session that created this folder, recorded here so the next one does not rediscover any of it.</p>
+
+<p><strong>The app was replaced first.</strong> <code>/Applications/Artisan.app</code> went 3.4.0 → 4.2.0 (official arm64 DMG, notarized, Team ID <code>6M3Z6W45L4</code>); the old bundle is in <code>~/.Trash/Artisan-3.4.0.app</code>. <code>master</code> was fast-forwarded 433 commits to <code>784effc82</code> (4.2.1-dev). Settings migrated cleanly — the roaster and batch size survived.</p>
+
+<p><strong>An external MCP bridge was built and verified against the real roaster</strong>, at <code>~/Documents/artisan-mcp</code> — outside this repo. It relays Artisan's Kaleido traffic over a WebSocket shim and injects guarded actuator commands. 102 checks pass across three suites, including a fake-Artisan client that reproduces the real handshake. It talked to the physical machine on this date. <a href="mcp-server.html">mcp-server</a> exists because that bridge, being outside the app, cannot see the roast — only the wire.</p>
+
+<p><strong>Two hardware truths were established the hard way</strong> and are written up in <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a>: the CP210x adapter can wedge such that <em>the OS itself</em> cannot configure the port (<code>stty</code> fails identically to pyserial; only a physical replug clears it), and this machine answers <code>{[TU]}</code>, <code>{[SN]}</code> and <code>{[PI]}</code> with a bare <code>{0}</code> — no unit, no serial number, no event flags, ever.</p>
+
+<p><strong>Then the owner pointed at a second working copy</strong> in Google Drive (<code>laurelate/AllArtisan/Artisan</code>) — a 2025 fork on branch <code>main</code>, 11 commits of real work, 433 commits behind. This had been invisible from this clone because the work sat on <code>origin/main</code> while this checkout tracked <code>origin/master</code>. It was merged forward in <code>738dcd16c</code>. Three conflicts, all from the same root cause: the fork had removed the in-app Designer in favour of a standalone window, and upstream had since kept and extended it. Both now coexist under distinct menu labels. The fork's <code>self.ToolkitMenu.addAction()</code> would have raised <code>AttributeError</code> at startup against current upstream, since <code>ToolkitMenu</code> is now assigned later than the action-creation block — fixed by moving the wiring into <code>create_tools_menu()</code>.</p>
+
+<p><strong>The merge also invalidated the first draft of a spec.</strong> <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> was written describing a clean slate; the merge showed a Kaleido adaptation already shipped in 2025 (BT-only mode). Finding 5 was added, and with it the discovery that its <code>et_offset = -50.0</code> carries no unit while this Artisan runs in Fahrenheit.</p>
+
+<p><strong>Left unverified, deliberately:</strong> nothing in the merge has been executed. Artisan 4.2.x needs Python 3.11+ and the repo <code>venv/</code> is 3.9, so neither the app nor its test suite ran against it. The auto-merged <code>designer.py</code> (2178 lines, from two independent extractions of the same original code) parses but has never been opened. And no write of any kind has ever been sent to the physical roaster.</p>
+
+</div>
+</body>
+</html>

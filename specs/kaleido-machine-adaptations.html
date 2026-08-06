@@ -8,6 +8,7 @@
   <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py" />
   <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
   <meta name="spec-decision" content="Grey out the Kaleido event-flag checkboxes when the machine has only ever reported sid low-nibble 0? Recommended no — do it as a tooltip note instead. Greying out on observed behaviour is stateful UI that will be wrong on the first machine that reports events late. Does not block." />
+  <meta name="spec-decision" content="What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -75,6 +76,18 @@ stty: tcsetattr: Invalid argument
 <p>Ruled out at the time: pyserial parameters (every combination including bare defaults failed), the <code>/dev/tty.</code> node, sandboxing, port ownership (nothing held it), USB enumeration (present, VID <code>0x10c4</code>), and driver conflicts (<code>IOSerialBSDClient</code> bound normally, no third-party kexts). <strong>Unplugging and replugging the USB cable cleared it completely</strong> and the machine has been healthy since.</p>
 
 <p><em>Proposed change, and the one with real user value:</em> catch <code>EINVAL</code> specifically on serial open and surface <em>"the USB adapter is not accepting configuration — unplug the cable, wait five seconds and plug it back in"</em> instead of a generic serial failure. This is not Kaleido-specific: any Artisan user on a Silicon Labs adapter (Hottop, TC4, MODBUS serial) can hit it, and the generic message sends them to check baud rates, which is exactly wrong. Reference implementation and the full differential is in <code>~/Documents/artisan-mcp/artisan_mcp/doctor.py</code>.</p>
+
+<h2>Finding 5 — an adaptation already exists, and it assumes Celsius</h2>
+
+<p class="lede" style="margin-top:0">Written after the first four. This spec originally described a clean slate; it was wrong.</p>
+
+<p><code>origin/main</code> carried 11 commits of 2025 fork work that this branch merged forward on Aug 6, 2026 — including <strong>"Add Bean Temperature Only mode for Kaleido roasters"</strong> (<code>602fcdb2c</code>). That mode already exists in <code>src/artisanlib/designer.py</code>: it hides the ET controls and auto-generates the ET curve from BT, on the reasoning that Kaleido PID is BT-based.</p>
+
+<p>The generation is one line — <code>landmarks[name]['ET'] = data['BT'] + self.et_offset</code>, with <code>self.et_offset = -50.0</code> at <code>designer.py:815</code>. <strong>That constant carries no unit.</strong> The surrounding code assumes Celsius (the y-axis locator at <code>designer.py:1349</code> is commented "Every 50°C"), but this Artisan runs <code>Mode = 'F'</code> and the owner's roast log records end temperatures in Fahrenheit (341–362 °F across 31 roasts).</p>
+
+<p>So a profile designed in Fahrenheit with BT-only mode on gets an ET curve 50 °F below BT, where the design intent reads as 50 °C below BT — about half the gap, and the generated channel is written into the exported <code>.alog</code>.</p>
+
+<p><em>Proposed change:</em> make the offset unit-aware — either scale it by the active mode, or label the input field with the unit and store what the user typed. <strong>Not yet established</strong> which is right, because it is not established what the ET channel is <em>for</em> here: if it exists only to satisfy the two-channel <code>.alog</code> format, the offset barely matters and a label is enough; if it is used as a reference curve while roasting, it matters a lot. Answer that before changing the number.</p>
 
 <h2>What is verified and what is not</h2>
 
