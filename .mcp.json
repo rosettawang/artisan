@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "artisan-roaster": {
+      "command": "/Users/rosettawang/Documents/artisan-mcp/mcp-server",
+      "args": []
+    }
+  }
+}

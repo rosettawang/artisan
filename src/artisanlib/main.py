@@ -1451,7 +1451,7 @@ class ApplicationWindow(QMainWindow):
         'eventsAction', 'alarmAction', 'phasesGraphAction', 'StatisticsAction', 'WindowconfigAction', 'colorsAction', 'themeMenu', 'autosaveAction',
         'batchAction', 'temperatureConfMenu', 'FahrenheitAction', 'CelsiusAction', 'languageMenu', 'analyzeMenu', 'fitIdealautoAction',
         'analyzeMenu', 'fitIdealx2Action', 'fitIdealx3Action', 'fitIdealx0Action', 'fitBkgndAction', 'clearresultsAction', 'roastCompareAction',
-        'designerAction', 'simulatorAction', 'wheeleditorAction', 'transformAction', 'temperatureMenu', 'ConvertToFahrenheitAction',
+        'simulatorAction', 'wheeleditorAction', 'transformAction', 'temperatureMenu', 'ConvertToFahrenheitAction',
         'ConvertToCelsiusAction', 'controlsAction', 'readingsAction', 'eventsEditorAction', 'buttonsAction', 'slidersAction', 'scheduleAction', 'lcdsAction', 'deltalcdsAction',
         'pidlcdsAction', 'scalelcdsAction', 'extralcdsAction', 'phaseslcdsAction', 'fullscreenAction', 'newRoastAction', 'loadSettingsAction', 'openRecentSettingMenu',
         'saveAsSettingsAction', 'resetAction', 'messagelabel', 'button_font_size_pt', 'button_font_size', 'button_font_size_small', 'button_font_size_small_selected',
@@ -2577,6 +2577,16 @@ class ApplicationWindow(QMainWindow):
         self.designerAction.triggered.connect(self.designerTriggered)
         self.designerAction.setCheckable(True)
         self.designerAction.setChecked(self.qmc.designerflag)
+
+        # Fork: the standalone Profile Designer window (launchStandaloneDesigner).
+        # It no longer replaces the in-app Designer -- upstream's designerAction is
+        # still defined here and still added by create_tools_menu(), so removing it
+        # would break that menu. Both are offered, under distinct labels.
+        # Menu wiring deliberately does NOT happen here: self.ToolkitMenu is not
+        # assigned until create_tools_menu() runs, so the original
+        # self.ToolkitMenu.addAction(...) at this point would raise AttributeError.
+        self.standaloneDesignerAction: QAction = QAction(QApplication.translate('Menu', 'Profile Designer') , self)
+        self.standaloneDesignerAction.triggered.connect(self.launchStandaloneDesigner)
 
         self.simulatorAction: QAction = QAction(QApplication.translate('Menu', 'Simulator') , self)
         self.simulatorAction.triggered.connect(self.simulate)
@@ -4306,6 +4316,7 @@ class ApplicationWindow(QMainWindow):
                 tools_menu.addMenu(self.analyzeMenu)
             tools_menu.addAction(self.roastCompareAction)
             tools_menu.addAction(self.designerAction)
+            tools_menu.addAction(self.standaloneDesignerAction) # fork: standalone window
             if ui_mode is UI_MODE.EXPERT:
                 tools_menu.addAction(self.simulatorAction)
                 tools_menu.addAction(self.wheeleditorAction)
@@ -12062,7 +12073,7 @@ class ApplicationWindow(QMainWindow):
         self.curvesAction.setEnabled(True)
         self.analyzeMenu.setEnabled(True)
         self.roastCompareAction.setEnabled(True)
-        self.designerAction.setEnabled(True)
+        # Old designer action removed
         self.simulatorAction.setEnabled(True)
         self.wheeleditorAction.setEnabled(True)
         self.transformAction.setEnabled(True)
@@ -12158,10 +12169,7 @@ class ApplicationWindow(QMainWindow):
             self.roastCompareAction.setEnabled(False)
         else:
             self.roastCompareAction.setEnabled(True)
-        if not designer:
-            self.designerAction.setEnabled(False)
-        else:
-            self.designerAction.setEnabled(True)
+        # Old designer action removed - no longer needed
         self.simulatorAction.setEnabled(False)
         if not wheel:
             self.wheeleditorAction.setEnabled(False)
@@ -25776,6 +25784,26 @@ class ApplicationWindow(QMainWindow):
                 except Exception: # pylint: disable=broad-except
                     pass
             self.startdesigner()
+
+    def launchStandaloneDesigner(self, _:bool = False) -> None:
+        """Launch the standalone profile designer window"""
+        try:
+            from artisanlib.designer import StandaloneDesignerWindow
+            
+            # Check if window already exists
+            if not hasattr(self, 'standalone_designer_window') or self.standalone_designer_window is None:
+                self.standalone_designer_window = StandaloneDesignerWindow()
+            
+            self.standalone_designer_window.show()
+            self.standalone_designer_window.raise_()
+            self.standalone_designer_window.activateWindow()
+            
+        except Exception as e: # pylint: disable=broad-except
+            import logging
+            _log = logging.getLogger(__name__)
+            _log.exception(e)
+            self.qmc.adderror((QApplication.translate('Error Message', 'Profile Designer could not be launched') + f': {e}'),
+                            getattr(e, 'errno', None))
 
     def startdesigner(self) -> None:
 #        self.showControls(False) # we show controls in designer to keep zoom feature accessible
