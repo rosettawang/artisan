@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>What this Kaleido actually reports, and the four places Artisan assumes otherwise</title>
+  <title>What this Kaleido actually reports, and where the fork drifted from it</title>
   <meta name="spec-status" content="open" />
-  <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py" />
+  <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py src/artisanlib/pid_dialogs.py src/artisanlib/designer.py" />
   <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
   <meta name="spec-decision" content="Grey out the Kaleido event-flag checkboxes when the machine has only ever reported sid low-nibble 0? Recommended no — do it as a tooltip note instead. Greying out on observed behaviour is stateful UI that will be wrong on the first machine that reports events late. Does not block." />
+  <meta name="spec-decision" content="Delete the fork's capBurnerOutputFlag checkbox? Recommended yes — upstream's dutyMax spin box (pid_dialogs.py:554) already caps burner output, at any value rather than only 80%, and the checkbox derives its state from dutyMax==80 so the two disagree whenever the cap is not exactly 80. If the 80% preset is genuinely wanted, keep it as a button that sets the spin box rather than a second source of truth. Does not block." />
   <meta name="spec-decision" content="What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
 
-<h1>What this Kaleido actually reports, and the four places Artisan assumes otherwise</h1>
+<h1>What this Kaleido actually reports, and where the fork drifted from it</h1>
 
-<p class="lede">Four protocol facts, each measured against the real machine on Aug 6, 2026 — not read out of the driver. Three are harmless to Artisan and dangerous to anything outside it; one is a real usability bug worth fixing upstream.</p>
+<p class="lede">Seven findings. Four are protocol facts measured against the real machine on Aug 6, 2026 rather than read out of the driver; three came from merging 433 upstream commits and finding that the fork had drifted — including a Kaleido RoR bug upstream fixed twice while this fork sat still.</p>
 
 <h2>The measurement</h2>
 
@@ -88,6 +89,32 @@ stty: tcsetattr: Invalid argument
 <p>So a profile designed in Fahrenheit with BT-only mode on gets an ET curve 50 °F below BT, where the design intent reads as 50 °C below BT — about half the gap, and the generated channel is written into the exported <code>.alog</code>.</p>
 
 <p><em>Proposed change:</em> make the offset unit-aware — either scale it by the active mode, or label the input field with the unit and store what the user typed. <strong>Not yet established</strong> which is right, because it is not established what the ET channel is <em>for</em> here: if it exists only to satisfy the two-channel <code>.alog</code> format, the offset barely matters and a label is enough; if it is used as a reference curve while roasting, it matters a lot. Answer that before changing the number.</p>
+
+<h2>Finding 6 — upstream has been fixing this machine's driver, and the fork was missing all of it</h2>
+
+<p>Derived Aug 6, 2026 with <code>git log --oneline $(git merge-base upstream/master 286742ffc)..upstream/master -- src/artisanlib/kaleido.py</code> — <strong>13 commits</strong>, none of which the 2025 fork had. The ones that matter to this roastery:</p>
+
+<table>
+  <tr><th>Commit</th><th>What it changed</th></tr>
+  <tr><td><code>f0ec346b4</code>, <code>76250b819</code></td><td><strong>"fix Kaleido RoR"</strong> — twice, the second with test cases. Rate of rise is the number a roaster steers by, and it was wrong on this driver before these landed. This alone justifies the merge.</td></tr>
+  <tr><td><code>ba9925882</code></td><td>Fixes event types on Kaleido import.</td></tr>
+  <tr><td><code>cdaaef96f</code>, <code>2c32f9fa1</code>, <code>efc400da0</code></td><td>A Kaleido CSV importer with test data, device-assignment alignment, and a UTF-8 decode fix.</td></tr>
+  <tr><td><code>c90e3b406</code></td><td>"100% Step set to 100 by default in Kaleido setups."</td></tr>
+</table>
+
+<p>The lesson for this fork is the one in <code>CLAUDE.md</code>: <strong>pull upstream before starting a phase.</strong> Sitting 433 commits behind did not just mean missing features — it meant running a knowingly-broken RoR on the machine the fork exists to serve.</p>
+
+<h2>Finding 7 — the cap-burner flag duplicates a control upstream already had</h2>
+
+<p>The 2025 fork added <code>capBurnerOutputFlag</code> to <code>pid_dialogs.py</code>: a checkbox labelled "Cap Burner Output at 80%" whose slot sets <code>pidcontrol.dutyMax = 80</code>.</p>
+
+<p>Upstream already ships that control. <code>pid_dialogs.py:554</code> defines a <code>dutyMax</code> spin box with range −100…100 and step 10, in a Max/Min duty-clamp group next to <code>dutyMin</code>. The fork's checkbox is a hardcoded preset for one value of it.</p>
+
+<p>It is also subtly wrong as written. Its checked state comes from <code>self.aw.pidcontrol.dutyMax == 80</code>, evaluated once at dialog construction — so setting the spin box to 75 leaves the checkbox unchecked while the burner is still capped, and two controls disagree about the same underlying value. Two widgets writing one setting, one of them with a hardcoded constant, is a bug waiting for the day the cap is wanted at 70.</p>
+
+<p>It survived the merge unchanged because deleting a fork feature is the owner's call, not a merge conflict resolution. See the decision.</p>
+
+<p>Worth knowing while deciding: the PID subsystem around it is <strong>not the one that was forked</strong> — 24 commits hit <code>pid_dialogs.py</code>, adding 2DOF PID (beta/gamma), gain scheduling, a derivative filter and limit, an output filter, bump-less MANUAL↔AUTO transfer and SV FIR filtering. Any remembered PID behaviour from 2025 should be re-checked rather than trusted.</p>
 
 <h2>What is verified and what is not</h2>
 

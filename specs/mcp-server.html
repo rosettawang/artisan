@@ -83,7 +83,7 @@
 
 <ul>
   <li><code>pyserial==3.5</code>, <code>websockets==17.0.1</code>, <code>aiohttp==3.14.3</code> — <strong>already dependencies.</strong></li>
-  <li><code>mcp</code> — the only addition. <code>Requires-Python: &gt;=3.10</code>; Artisan's CI runs 3.14 (<code>.github/workflows/mypy.yml</code>), so it is compatible.</li>
+  <li><code>mcp</code> — the only addition. <code>Requires-Python: &gt;=3.10</code>, and Artisan's own floor is <strong>3.12+</strong> (<code>src/pyproject.toml</code>, raised upstream in <code>6908b688c</code>; CI runs 3.14), so it is comfortably compatible. Note the floor is 3.12 and not 3.11 — the external bridge's venv is 3.11, which is fine for a separate process and <em>not</em> fine for anything that has to import Artisan.</li>
 </ul>
 
 <p>PyInstaller will need <code>mcp</code> reachable from <code>src/artisan-mac.spec</code>. Not verified: whether <code>mcp</code>'s pydantic models need a <code>hiddenimports</code> entry. Find out by building, not by reasoning — <code>pyinstaller artisan-mac.spec</code> and launch the bundle.</p>
@@ -110,6 +110,20 @@
 
 <h3>C — Roast events and the profile</h3>
 <p>The reason for the fork. <code>mark_roast_event</code> via the mark*Signal signals — real CHARGE and DROP, not sid bit-fiddling. Then read access to the background profile and phases so Claude can answer "am I ahead of the reference at this point in the roast", which is the actual question a roaster asks.</p>
+
+<h3>The licence changed under this spec, and it lands on exactly this feature</h3>
+
+<p>Upstream tightened the licence from <strong>GPLv3 to AGPLv3</strong> in <code>1604ca592</code> ("adds RoastHubs support - tightens license from GPLv3 to AGPLv3"), during the 433 commits this fork merged forward. <code>LICENSE</code> now reads <em>GNU Affero General Public License, Version 3</em>.</p>
+
+<p>That matters here more than it would for most features, because AGPL §13 makes <em>network interaction</em> a distribution trigger, and this spec is specifically about adding a network-facing server. Concretely:</p>
+
+<ul>
+  <li><strong>Phases A–C are unaffected in practice.</strong> Bound to <code>127.0.0.1</code>, used by the owner on the owner's own machine, nothing is conveyed to anyone. No obligation arises from running modified software for yourself.</li>
+  <li><strong>Phase D is where it bites.</strong> A hosted MCP that other people reach over a network would put the modified Artisan source in scope for provision to those users. That does not make Phase D impossible — it makes "publish the fork" a precondition of it rather than an afterthought.</li>
+  <li><strong>Binding to <code>0.0.0.0</code> is now a licensing decision as well as a safety one.</strong> The spec already refuses it on safety grounds; this is a second, independent reason.</li>
+</ul>
+
+<p>Not legal advice, and nobody here is a lawyer — recorded because this spec was drafted assuming GPLv3 and that assumption is simply out of date. If Phase D is ever seriously wanted, get an actual opinion first.</p>
 
 <h3>D — Simulator device, so none of this needs beans</h3>
 <p>Artisan already ships <code>artisanlib/simulator.py</code>. Wire the MCP tools to work against it so the whole surface can be exercised with no hardware and no fire risk — the role <code>artisan_mcp/roaster.py</code>'s <code>SimulatorLink</code> plays today. Whether Artisan's simulator is rich enough to respond to heater changes is <strong>not verified</strong>; read it before assuming.</p>
