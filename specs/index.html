@@ -219,6 +219,24 @@
   <td><code>pytest test/</code> against a live <code>HOME</code> wrote into the owner's real preferences — <code>test_main.py:3196</code> uses a bare <code>QSettings()</code>. Seven window-geometry keys deleted, <code>starts</code> reset, two test keys left behind.</td>
   <td>Repaired from a pre-run backup (7/7 keys restored, junk deleted, device config never affected). CLAUDE.md now carries the backup + isolated-<code>HOME</code> invocation.</td>
 </tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>CLAUDE.md</td>
+  <td>The fix written for the row above — "run the suite with an isolated <code>HOME</code>" — <strong>does not work on macOS.</strong> Re-running the suite with <code>HOME</code> overridden clobbered the same seven keys again: <code>QSettings</code> goes through <code>CFPreferences</code>/<code>cfprefsd</code>, a per-user daemon that serves the real domain regardless of <code>$HOME</code>.</td>
+  <td>Settings repaired a second time. CLAUDE.md now documents <code>defaults export</code> / <code>defaults import</code> plus explicit <code>defaults delete</code> of the two junk keys (import merges, it does not replace). <strong>A mitigation that was never tested is worse than none</strong> — it gets trusted.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>(no spec — merge audit)</td>
+  <td><code>main.py</code> audited the way <code>pid_dialogs.py</code> was. Three collateral removals found: <code>'designerAction'</code> missing from <code>__slots__</code>, and both <code>designerAction.setEnabled</code> sites replaced by comments. The merge had restored the action but not the code that enables and disables it, so the Designer menu entry existed with dead state logic.</td>
+  <td>All three restored; upstream's 3 <code>setEnabled</code> call sites are back. The <code>__slots__</code> omission never raised because a <code>QMainWindow</code> subclass still gets a <code>__dict__</code> — verified, and the reason it went unnoticed.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>(no spec — merge audit)</td>
+  <td>Earlier claim that <code>designer.py</code> was a risky merge of "two independent extractions" was wrong. Measured: <strong>1418 insertions, zero deletions</strong> against upstream — our copy is upstream's file with the fork's classes appended, nothing overwritten.</td>
+  <td>Measurement won. One addition inside a shared class, <code>defaults_button.setAutoDefault(False)</code>, is a deliberate improvement and was kept. Separately fixed: the fork imported matplotlib's deprecated <code>backend_qt5agg</code> shim into a PyQt6-only app; now <code>backend_qtagg</code>, matching <code>canvas.py:108</code>.</td>
+</tr>
 </table>
 
 <h2 id="run-log">Run log</h2>
