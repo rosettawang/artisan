@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loading a plan is not consenting to be driven by it</title>
   <meta name="spec-status" content="open" />
+  <meta name="spec-blocker" content="Aug 7, 2026 — the defect is fixed: a background load now names what it applied. What remains is gathering the four scattered checkboxes (pid_dialogs.py:793 and :930, alarms.py:138, phases.py:106) into one visible setting. PARKED deliberately: it touches four dialogs in the most merge-exposed files in the fork, and the announcement already removed the silence that made this a finding. Worth folding in when one of those dialogs is being edited anyway, not worth a pass of its own." />
   <meta name="spec-touches" content="src/artisanlib/pid_control.py src/artisanlib/pid_dialogs.py src/artisanlib/main.py" />
   <link rel="stylesheet" href="spec.css" />
 </head>

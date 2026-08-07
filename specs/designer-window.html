@@ -97,6 +97,20 @@ self.designertimeinit = [0, 4*60, 9*60, 11*60, 12*60, 12.5*60, 13*60, 17*60]
 
 <p><em>Fix:</em> the defaults must scale to the roast being designed rather than being fixed constants, and a refused apply must say <em>which</em> pair is out of order rather than reverting silently. This is one change, not two, and it closes 1.1, 1.4 and most of 1.3.</p>
 
+<div class="callout">
+<h4>Measured Aug 7, 2026 — 1.2 and 1.6 are answered, and neither needs building</h4>
+<p>Both notes said "measure before specifying". Measured, via the new headless entry point:</p>
+<p><strong>1.2 — file size does not depend on roast length.</strong> <code>export_background_alog</code> writes a <em>fixed</em> 1800 points (<code>num_points = 1800</code>), so a longer roast gets coarser spacing, not more data:</p>
+<table>
+  <tr><th>DROP</th><th>points</th><th>spacing</th><th>file</th></tr>
+  <tr><td>12:00</td><td>1800</td><td>0.57 s</td><td>107 KB</td></tr>
+  <tr><td>24:00</td><td>1800</td><td>0.97 s</td><td>108 KB</td></tr>
+  <tr><td>48:00</td><td>1800</td><td>1.77 s</td><td>108 KB</td></tr>
+</table>
+<p>So the request as written does not apply: there is no interval to lengthen, and the file is ~108 KB whatever you design. The real observation underneath it is that <strong>0.57 s spacing on a short roast is absurd</strong> — Artisan samples at 2 s, so the designer writes roughly four points per sample it will ever be compared against. Replacing the fixed count with a fixed <em>interval</em> (say 2 s to match sampling) would cut a 12-minute profile to ~360 points and about a fifth of the size. That is a real, small improvement — but it is not what the note asked for, and it is not urgent, so it is recorded rather than built.</p>
+<p><strong>1.6 — there is no 99-minute cap.</strong> A 150-minute roast exports fine, writing 155.0 minutes including the tail. The validator allows three digits of minutes. As suspected, this was fixed upstream at some point in the 433 commits; nothing to do.</p>
+</div>
+
 <h2>Genuinely unbuilt</h2>
 
 <table>
