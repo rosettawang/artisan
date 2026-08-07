@@ -7,7 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py src/artisanlib/pid_dialogs.py src/artisanlib/designer.py" />
   <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
-  <meta name="spec-decision" content="What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -27,6 +26,24 @@
 <p><strong>12 new unit tests</strong> (<code>test_kaleido_diagnostics.py</code>), 19 passing with the existing Kaleido suite. They pin the awkward part: <code>termios.error</code> carries <code>(errno, msg)</code> in <code>args</code> and has no <code>.errno</code> attribute, so both shapes must be recognised, as must a pyserial wrapper that only has the text.</p>
 <p><strong>Not verified:</strong> no wedged adapter was available to reproduce EINVAL through Artisan's own connect path — the classifier is unit-tested against constructed exceptions, not a live failure. The next real wedge is the test.</p>
 <p><strong>Incidental finding:</strong> <code>pytest</code> cannot even collect while an ArtisanViewer is running — importing <code>artisanlib.main</code> reaches <code>sys.exit(0)</code> at <code>main.py:258</code> and pytest reports only <em>"mainloop: caught unexpected SystemExit!"</em>. Close every Artisan instance before running the suite.</p>
+</div>
+
+<div class="callout">
+<h4>Answered by investigation, Aug 6, 2026 — the ET channel is format-filler <em>here</em>, and Finding 5 is fixed</h4>
+<p>The question was whether BT-only mode's generated ET is only there to satisfy the two-channel <code>.alog</code> format, or is read while roasting. Traced rather than guessed:</p>
+<ul>
+  <li><strong>The PID does not read it.</strong> In Follow-background mode the setpoint comes from <code>followCurveNr = self.pidSource</code> (<code>pid_control.py:1691</code>), and for a non-TC4 device <code>1</code> means BT, <code>2</code> means ET (<code>pid_control.py:1258</code>). This install has <code>pidSource</code> unset, so the default <code>1</code> — <strong>BT</strong> — via <code>backgroundSmoothedBTat</code>. Follow mode is live: <code>svMode = 2</code>.</li>
+  <li><strong>The only other functional reader is not enabled.</strong> Background ET feeds <code>CM_ETBT</code>, the Curve Match device (id 186, <code>comm.py:574</code>), which computes ET/BT deviation statistics. Configured extra devices are <code>[141, 139, 140]</code> — Kaleido Heater/Fan, SV/AT, Drum/AH. 186 is absent.</li>
+  <li><strong>Everything else that touches <code>temp1B</code> is display</strong> — the background table in <code>background.py</code> and curve drawing in <code>canvas.py</code>.</li>
+</ul>
+<p>So the <code>-50</code> constant was never driving the roast, and the alarming version of this finding is retired. <strong>What was actually wrong was the labelling</strong>, and that is now fixed: the standalone designer reads <code>Mode</code> from Artisan's own settings and speaks that unit throughout — table headers, y-axis, the temperature-trigger placeholder, and the factory landmark defaults, which are written in Celsius and converted so they keep meaning the same roast (CHARGE 80 °C → 176 °F, DROP 210 °C → 410 °F). The offset converts as an <em>interval</em>: −50 °C → −90 °F, not −58.</p>
+<p>Two things worth keeping in view:</p>
+<ul>
+  <li><strong>This is configuration-dependent, not a property of Artisan.</strong> Set <code>pidSource</code> to 2 (ET) while Follow mode is on and the synthetic ET curve becomes the setpoint driving the burner. A comment at <code>designer.py</code>'s <code>et_offset</code> says so.</li>
+  <li><strong>Saved designer defaults carry no unit.</strong> <code>load_defaults</code> returns stored numbers as-is, so switching Artisan between C and F after clicking "Save as Default" will surface them unconverted. Not fixed — converting stored values on a guess would corrupt them. There are currently no saved defaults, so nothing is affected today.</li>
+</ul>
+<p><strong>Deliberately not changed:</strong> the default landmark <em>values</em>. Converting them is mechanical; replacing them with bay-nut numbers is a preference, and that decision belongs to <a href="designer-window.html">designer-window</a>. Note the converted defaults (DROP 410 °F) sit well above this roastery's actual practice — the roast log records 341–362 °F.</p>
+<p><strong>18 new unit tests</strong> (<code>test_designer_units.py</code>) pin the interval-vs-absolute distinction, since converting an offset with the absolute formula gives −58 and looks plausible.</p>
 </div>
 
 <h2>The measurement</h2>

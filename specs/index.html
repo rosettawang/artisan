@@ -76,7 +76,7 @@
   <li><a href="control-handover-and-ui.html">control-handover-and-ui</a> — Loading a plan is not consenting to be driven by it<br /><span class="meta" style="margin:0"><strong>3 decisions waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code>, <code>src/artisanlib/pid_dialogs.py</code></span></li>
   <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
   <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
-  <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>2 decisions waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
+  <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
 </ol>
 <div class="callout warn">
@@ -94,7 +94,7 @@
 <h2 id="decisions">Decisions waiting on the owner</h2>
 <p>Choices only the owner can make — answer in any Claude session (in chat, or edit the spec's <code>spec-decision</code> meta). A session records the answer in the owning spec and the next prune drops it from here. It never silently picks a default and buries it in a commit.</p>
 <!-- GENERATED:DECISIONS:START -->
-<p class="meta">6 decisions across 3 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
+<p class="meta">5 decisions across 3 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
 <ul class="spec-decision-list">
   <li>
     <a href="control-handover-and-ui.html">Loading a plan is not consenting to be driven by it</a>
@@ -114,7 +114,6 @@
     <a href="kaleido-machine-adaptations.html">What this Kaleido actually reports, and where the fork drifted from it</a>
     <ul>
       <li>Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way.</li>
-      <li>What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer.</li>
     </ul>
   </li>
 </ul>

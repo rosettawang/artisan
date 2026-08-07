@@ -802,7 +802,18 @@ def designer_temp_unit() -> str:
     (deg C). Returns 'C' or 'F'; 'C' if the setting is missing or unreadable.
     """
     try:
-        mode = QSettings().value('Mode', 'C')
+        import sys as _sys
+
+        from artisanlib.util import (application_name, application_organization_domain,
+                                     application_organization_name)
+        # A bare QSettings() does NOT reach Artisan's domain from a standalone
+        # process: it keys off this app's own (unset) name. Construct it exactly
+        # as main.py:557-560 does, including the macOS domain quirk.
+        if _sys.platform.startswith('darwin'):
+            settings = QSettings(application_organization_domain, application_name)
+        else:
+            settings = QSettings(application_organization_name, application_name)
+        mode = settings.value('Mode', 'C')
         return 'F' if str(mode).upper().startswith('F') else 'C'
     except Exception:  # pylint: disable=broad-except
         return 'C'
@@ -1224,7 +1235,7 @@ class DesignerData:
                 # New format - single value
                 self.curviness = curviness_data
             self.bt_only_mode = data.get('bt_only_mode', False)
-            self.et_offset = data.get('et_offset', -50.0)
+            self.et_offset = data.get('et_offset', c_delta_to(-50.0, getattr(self, 'temp_unit', 'C')))
             self.events = data.get('events', [])
 
 
@@ -1272,7 +1283,7 @@ class ProfileCanvas(FigureCanvas):
     def setup_plot(self):
         """Initialize plot appearance"""
         self.ax.set_xlabel('Time (mm:ss)')
-        self.ax.set_ylabel('Temperature (°C)')
+        self.ax.set_ylabel(f'Temperature (°{self.data.temp_unit})')
         # No title needed
         self.ax.grid(True, alpha=0.3)
         
@@ -1388,14 +1399,14 @@ class ProfileCanvas(FigureCanvas):
         temp_range = y_max - y_min
         
         if temp_range <= 100:  # Small range
-            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(10))  # Every 10°C
-            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(5))   # Every 5°C
+            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(10))  # Every 10 degrees
+            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(5))   # Every 5 degrees
         elif temp_range <= 200:  # Medium range
-            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(20))  # Every 20°C
-            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(10))  # Every 10°C
+            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(20))  # Every 20 degrees
+            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(10))  # Every 10 degrees
         else:  # Large range
-            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(50))  # Every 50°C
-            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(25))  # Every 25°C
+            self.ax.yaxis.set_major_locator(ticker.MultipleLocator(50))  # Every 50 degrees
+            self.ax.yaxis.set_minor_locator(ticker.MultipleLocator(25))  # Every 25 degrees
             
     def plot_events(self, time_curve, bt_curve, et_curve):
         """Plot events and alarms on the chart"""
@@ -1605,9 +1616,9 @@ class StandaloneDesignerWindow(QMainWindow):
         header_landmark.setStyleSheet("font-weight: bold;")
         header_time = QLabel("Time")
         header_time.setStyleSheet("font-weight: bold;")
-        header_bt = QLabel("BT (°C)")
+        header_bt = QLabel(f"BT (°{self.data.temp_unit})")
         header_bt.setStyleSheet("font-weight: bold;")
-        self.header_et = QLabel("ET (°C)")
+        self.header_et = QLabel(f"ET (°{self.data.temp_unit})")
         self.header_et.setStyleSheet("font-weight: bold;")
         
         layout.addWidget(header_landmark, 0, 0)
@@ -1895,9 +1906,9 @@ class StandaloneDesignerWindow(QMainWindow):
             self.event_trigger_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]?[0-9]:[0-5][0-9]$')))
             self.event_trigger_value.setPlaceholderText("mm:ss")
         else:  # Temperature
-            self.event_trigger_value.setText("150")
-            self.event_trigger_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,3}$')))
-            self.event_trigger_value.setPlaceholderText("°C")
+            self.event_trigger_value.setText(f"{c_to(150.0, self.data.temp_unit):g}")
+            self.event_trigger_value.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[0-9]{1,4}$')))
+            self.event_trigger_value.setPlaceholderText(f"°{self.data.temp_unit}")
             
     def update_event_value_input(self, action_type: str):
         """Update event value input and unit based on action type"""
@@ -2008,7 +2019,7 @@ class StandaloneDesignerWindow(QMainWindow):
             if event['trigger_type'] == 'time':
                 trigger_str = stringfromseconds_standalone(event['trigger_value'])
             else:
-                trigger_str = f"{event['trigger_value']}°C {event['trigger_type']}"
+                trigger_str = f"{event['trigger_value']}°{self.data.temp_unit} {event['trigger_type']}"
             
             item_text = f"{trigger_str} - {event['description']}"
             
