@@ -6,7 +6,9 @@ A fork of [artisan-roaster-scope/artisan](https://github.com/artisan-roaster-sco
 
 - `main` — **the default branch and the only one that matters.** Carries the 2025 fork work (standalone Profile Designer, Kaleido BT-only mode, curve smoothness, cap-burner-output), merged forward onto 4.2.1 on Aug 6, 2026 (`738dcd16c`), plus `specs/`.
 - `master` — **deleted** Aug 6, 2026, locally and on the remote. It only ever mirrored upstream, and `upstream/master` already does that. For a pristine upstream reference use `git fetch upstream && git log upstream/master`.
-- `mcp-kaleido-adaptations` — local-only, points at the same commit as `main`. Redundant; delete when convenient.
+- `mcp-kaleido-adaptations` — **deleted** Aug 6, 2026, after confirming it was fully contained in `main`. It was local-only and redundant.
+
+**One branch, one remote branch, and `origin/HEAD` points at it.** If a second branch ever appears, reconcile it rather than leaving it: this repo has already lost half a day to work sitting invisibly on `origin/main` while the checkout tracked `origin/master`.
 
 Pull upstream *before* starting a phase, not after. Every source file a spec touches is a future conflict, which is why specs declare `spec-touches` and prefer new files to edits.
 
