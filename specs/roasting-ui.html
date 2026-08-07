@@ -17,7 +17,7 @@
 
 <h1>A roasting UI with only the buttons this roast needs</h1>
 
-<p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. This is mostly a configuration job with one small piece of code, not a new UI.</p>
+<p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. It is a configuration job with <strong>no code at all</strong> — including the switch, which already exists as <kbd>⌘</kbd>+number.</p>
 
 <div class="callout">
 <h4>Step 1 built, Aug 6, 2026 — <code>minimal-roasting.apal</code></h4>
@@ -63,11 +63,15 @@
 
 <p><strong>So the honest scope is:</strong> build one palette, hide two or three default buttons, and add the one thing genuinely missing — a way to switch palettes without going through a config dialog. Everything else is already there and unused.</p>
 
-<h2>The one thing that is actually missing</h2>
+<h2><del>The one thing that is actually missing</del> — it was not missing</h2>
 
-<p>Palettes can be defined, but switching between them is buried. For "simplified" to mean anything during a roast, the switch has to be reachable <em>without</em> opening a dialog — otherwise the tailored set is one more thing to set up rather than a thing that drops in.</p>
-
-<p><strong>Proposed:</strong> a palette selector on the main window, next to the button area, showing the palette label (this install's is currently <code>all</code>). One combo box or a pair of arrows. It is the only code in this spec, and it touches <code>main.py</code> only.</p>
+<div class="callout warn">
+<h4>Withdrawn Aug 6, 2026. This section was wrong.</h4>
+<p>It claimed palette switching "is buried" and proposed a selector on the main window — the only code in this spec. <strong>Artisan already has the switch, and it is better than the one proposed:</strong> <code>buttonpalette_shortcuts</code> defaults to <code>True</code> and <kbd>⌘</kbd>+number switches palettes directly (<code>main.py:12411</code>). It is not saved in this install's settings, which means it is on at its default.</p>
+<p>It is also smarter than a combo box: the call is <code>setbuttonsfrom(n, only_non_empty=True)</code>, so <kbd>⌘4</kbd>–<kbd>⌘9</kbd> do nothing rather than blanking the button area on an empty slot.</p>
+<p><strong>So <kbd>⌘3</kbd> loads the minimal set and <kbd>⌘1</kbd> puts the full grid back.</strong> That is exactly the "can be dropped" the request asked for, and it needs no code at all. Step 3 below is cancelled; this spec is now pure configuration.</p>
+<p>The lesson is the one this repo keeps relearning: the claim was written from reading the settings and the palette structures, not from searching for a shortcut. Grep for the feature before specifying it.</p>
+</div>
 
 <h2>What the minimal set should contain</h2>
 
@@ -112,7 +116,7 @@
 <ol>
   <li><strong>Build the palette in an empty slot (3–9).</strong> Pure configuration, zero code, instantly reversible — palette 1 is untouched and one switch away. Try it on one roast before anything else is built.</li>
   <li><strong>Hide the default buttons that are not earning their space.</strong> Also configuration, per-button, reversible.</li>
-  <li><strong>Add the palette selector to the main window.</strong> The only code. Worth doing only if step 1 survives a roast.</li>
+  <li><del><strong>Add the palette selector to the main window.</strong></del> <strong>Cancelled</strong> — <kbd>⌘</kbd>+number already does it (see above).</li>
   <li><strong>Show the background offset next to the nudge.</strong> Needs <a href="background-nudge-as-data.html">background-nudge-as-data</a>, whose persistence and per-nudge record shipped Aug 6, 2026.</li>
 </ol>
 

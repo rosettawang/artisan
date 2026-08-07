@@ -38,7 +38,7 @@
   <li>
     <a href="roasting-ui.html">A roasting UI with only the buttons this roast needs</a>
     <span class="tag tag-open">open</span>
-    <p>Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. This is mostly a configuration job with one small piece of code, not a new UI.</p>
+    <p>Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. It is a configuration job with no code at all — including the switch, which already exists as ⌘+number.</p>
   </li>
   <li>
     <a href="mcp-server.html">An MCP server inside Artisan, and the four things being outside it costs</a>
@@ -59,6 +59,7 @@
     <a href="background-nudge-as-data.html">Nudging the background is a measurement, and Artisan throws it away</a>
     <span class="tag tag-open">open</span>
     <p>You move the background left or right when the roast stops matching the plan. That act is the most honest measurement in the whole session — it is the roaster saying, in seconds, exactly how wrong the plan was. Artisan tracks the number in memory, resets it to zero in five different places, and never writes it to disk.</p>
+    <p class="blocker"><strong>Remaining:</strong> Steps 1 and 2 shipped Aug 6, 2026 (offset persisted, per-nudge history recorded, PID-follow warning). Steps 3 and 4 are PARKED, not blocked by a person: they analyse nudge history across roasts, and no saved profile contains any yet — the field was only added today. They become buildable once a few roasts have been recorded with it. Nothing to decide; it needs elapsed time.</p>
   </li>
   <li>
     <a href="designer-window.html">The Designer notes, triaged — a third of them are already built</a>
@@ -70,6 +71,12 @@
     <span class="tag tag-open">open</span>
     <p>Seven findings. Four are protocol facts measured against the real machine on Aug 6, 2026 rather than read out of the driver; three came from merging 433 upstream commits and finding that the fork had drifted — including a Kaleido RoR bug upstream fixed twice while this fork sat still.</p>
   </li>
+  <li>
+    <a href="heat-cutoff-override.html">Who cuts the heat at 165 °C, and can software override it</a>
+    <span class="tag tag-open">open</span>
+    <p>Every roast on this machine dies in a 14 °F band. Artisan's four automatic DROP paths are ruled out by measurement, and one roast proves the machine cuts its own heat unprompted — but nobody has yet watched the wire at the moment it happens, and that single recording decides whether this is fixable in software or is a machine limit to design around.</p>
+    <p class="blocker"><strong>Remaining:</strong> Aug 7, 2026 — Phase 1 (frame logging) needs nobody. Phases 2 and 3 need the owner at the roaster, and Phase 3 requires the first-ever write to this machine, which kaleido-machine-adaptations gates behind a fan/drum command on a cold empty drum.</p>
+  </li>
 </ul>
 
 <h2 id="execution-order">Execution order</h2>
@@ -79,11 +86,12 @@
 <ol class="spec-order">
   <li><a href="crack-listener.html">crack-listener</a> — Listening for cracks, and using the machine's own state to know what to ignore<br /><span class="meta" style="margin:0">shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
   <li><a href="control-handover-and-ui.html">control-handover-and-ui</a> — Loading a plan is not consenting to be driven by it<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code>, <code>src/artisanlib/pid_dialogs.py</code></span></li>
-  <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
   <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
+  <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
   <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0">after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="roasting-ui.html">roasting-ui</a> — A roasting UI with only the buttons this roast needs<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code></span></li>
+  <li><a href="heat-cutoff-override.html">heat-cutoff-override</a> — Who cuts the heat at 165 °C, and can software override it<br /><span class="meta" style="margin:0"><strong>2 decisions waiting on the owner</strong> · after kaleido-machine-adaptations</span></li>
 </ol>
 <div class="callout warn">
 <h4>Conflicts to resolve first</h4>
@@ -100,7 +108,7 @@
 <h2 id="decisions">Decisions waiting on the owner</h2>
 <p>Choices only the owner can make — answer in any Claude session (in chat, or edit the spec's <code>spec-decision</code> meta). A session records the answer in the owning spec and the next prune drops it from here. It never silently picks a default and buries it in a commit.</p>
 <!-- GENERATED:DECISIONS:START -->
-<p class="meta">3 decisions across 3 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
+<p class="meta">5 decisions across 4 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
 <ul class="spec-decision-list">
   <li>
     <a href="roasting-ui.html">A roasting UI with only the buttons this roast needs</a>
@@ -118,6 +126,13 @@
     <a href="kaleido-machine-adaptations.html">What this Kaleido actually reports, and where the fork drifted from it</a>
     <ul>
       <li>Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way.</li>
+    </ul>
+  </li>
+  <li>
+    <a href="heat-cutoff-override.html">Who cuts the heat at 165 °C, and can software override it</a>
+    <ul>
+      <li>Authorise writes to the physical roaster for this investigation? Recommended yes, staged: fan on a cold empty drum first (discharging the guardrail in kaleido-machine-adaptations), then AH on a cold drum, and only then AH mid-roast with the owner watching. Blocks Phase 3 only; Phase 1 and 2 answer most of the question without any write.</li>
+      <li>If the cut proves machine-issued and non-overridable, retarget the roast to 335 °F and stop pursuing 350? Recommended yes — 32 completed roasts cluster at a 328 °F median and the owner's own tasting notes call 335 golden and 339 burnt, so 335 is both the reliable ceiling and the preferred result. Does not block; it is what to do with the answer.</li>
     </ul>
   </li>
 </ul>
@@ -266,8 +281,44 @@
   <td>Earlier claim that <code>designer.py</code> was a risky merge of "two independent extractions" was wrong. Measured: <strong>1418 insertions, zero deletions</strong> against upstream — our copy is upstream's file with the fork's classes appended, nothing overwritten.</td>
   <td>Measurement won. One addition inside a shared class, <code>defaults_button.setAutoDefault(False)</code>, is a deliberate improvement and was kept. Separately fixed: the fork imported matplotlib's deprecated <code>backend_qt5agg</code> shim into a PyQt6-only app; now <code>backend_qtagg</code>, matching <code>canvas.py:108</code>.</td>
 </tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>roasting-ui</td>
+  <td>Spec claimed palette switching "is buried" and proposed a main-window selector as its only code. Artisan already has it: <code>buttonpalette_shortcuts</code> defaults on and <kbd>⌘</kbd>+number switches palettes (<code>main.py:12411</code>), with <code>only_non_empty=True</code> so empty slots are no-ops.</td>
+  <td>Code won. Step 3 cancelled and the spec is now pure configuration. The claim came from reading palette structures without grepping for a shortcut — the same failure as assuming a fix works without running it.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>control-handover-and-ui</td>
+  <td>Spec called the four background-load flags "hidden always-on". Each has a checkbox (<code>pid_dialogs.py:793</code>, <code>:930</code>, <code>alarms.py:138</code>, <code>phases.py:106</code>).</td>
+  <td>Code won. They are <em>scattered across four dialogs and absent at the moment they act</em> — a weaker, true claim that changes the remaining work from exposing buried state to gathering existing controls.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>roasting-ui</td>
+  <td>The generated <code>.apal</code> passed 12 structural checks but its ◀/▶ button labels came back from Artisan's own <code>loadPalettes</code> as <code>â\x97\x80 bg</code> — UTF-8 read as Latin-1.</td>
+  <td>Running it won. Labels are ASCII (<code>&lt;&lt; bg</code> / <code>bg &gt;&gt;</code>) and re-verified through the same parser. Palette labels must stay ASCII.</td>
+</tr>
 </table>
 
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>roasting-ui</td>
+  <td>Spec claimed palette switching "is buried" and proposed a main-window selector as its only code. Artisan already has it: <code>buttonpalette_shortcuts</code> defaults on and <kbd>⌘</kbd>+number switches palettes (<code>main.py:12411</code>), with <code>only_non_empty=True</code> so empty slots are no-ops.</td>
+  <td>Code won. Step 3 cancelled and the spec is now pure configuration. The claim came from reading palette structures without grepping for a shortcut — the same failure as assuming a fix works without running it.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>control-handover-and-ui</td>
+  <td>Spec called the four background-load flags "hidden always-on". Each has a checkbox (<code>pid_dialogs.py:793</code>, <code>:930</code>, <code>alarms.py:138</code>, <code>phases.py:106</code>).</td>
+  <td>Code won. They are <em>scattered across four dialogs and absent at the moment they act</em> — a weaker, true claim that changes the remaining work from exposing buried state to gathering existing controls.</td>
+</tr>
+<tr>
+  <td>Aug 6, 2026</td>
+  <td>roasting-ui</td>
+  <td>The generated <code>.apal</code> passed 12 structural checks but its ◀/▶ button labels came back from Artisan's own <code>loadPalettes</code> as <code>â\x97\x80 bg</code> — UTF-8 read as Latin-1.</td>
+  <td>Running it won. Labels are ASCII (<code>&lt;&lt; bg</code> / <code>bg &gt;&gt;</code>) and re-verified through the same parser. Palette labels must stay ASCII.</td>
+</tr>
 <h2 id="run-log">Run log</h2>
 <p>Per-spec outcomes from multi-spec runs live in <a href="RUN-LOG.html">RUN-LOG.html</a>, appended as a run goes.</p>
 

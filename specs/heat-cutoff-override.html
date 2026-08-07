@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Who cuts the heat at 165 °C, and can software override it</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="artisan-mcp/artisan_mcp/roaster.py artisan-mcp/artisan_mcp/bridge.py artisan-mcp/artisan_mcp/daemon.py artisan-mcp/artisan_mcp/mcp_server.py" />
+  <meta name="spec-needs" content="kaleido-machine-adaptations" />
+  <meta name="spec-blocker" content="Aug 7, 2026 — Phase 1 (frame logging) needs nobody. Phases 2 and 3 need the owner at the roaster, and Phase 3 requires the first-ever write to this machine, which kaleido-machine-adaptations gates behind a fan/drum command on a cold empty drum." />
+  <meta name="spec-decision" content="Authorise writes to the physical roaster for this investigation? Recommended yes, staged: fan on a cold empty drum first (discharging the guardrail in kaleido-machine-adaptations), then AH on a cold drum, and only then AH mid-roast with the owner watching. Blocks Phase 3 only; Phase 1 and 2 answer most of the question without any write." />
+  <meta name="spec-decision" content="If the cut proves machine-issued and non-overridable, retarget the roast to 335 °F and stop pursuing 350? Recommended yes — 32 completed roasts cluster at a 328 °F median and the owner's own tasting notes call 335 golden and 339 burnt, so 335 is both the reliable ceiling and the preferred result. Does not block; it is what to do with the answer." />
+  <meta name="spec-verify" content="python3 -c &quot;import json,sys; f=[json.loads(l) for l in open('/Users/rosettawang/.artisan-mcp/frames.jsonl')]; ah=[r for r in f if 'AH' in r.get('frame','')]; sys.exit(0 if any(r['dir']=='machine' for r in ah) else 1)&quot;" />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+<div class="internal">Internal planning dashboard — <b>fork-only, never part of an upstream PR</b></div>
+<div class="wrap">
+
+<p><a href="index.html">← Specs index</a></p>
+
+<h1>Who cuts the heat at 165 °C, and can software override it</h1>
+
+<p class="lede">Every roast on this machine dies in a 14 °F band. Artisan's four automatic DROP paths are ruled out by measurement, and one roast proves the machine cuts its own heat unprompted — but nobody has yet watched the wire at the moment it happens, and that single recording decides whether this is fixable in software or is a machine limit to design around.</p>
+
+<div class="callout">
+<h4>The one thing that would settle it</h4>
+<p>Capture every serial frame through a roast that reaches the cut, and read what crosses the wire in the two seconds around <code>AH</code> going to 0.</p>
+<ul>
+  <li>If <code>{[AH 0]}</code> appears <strong>from Artisan</strong> → software-issued, find the caller, override it.</li>
+  <li>If <code>AH:0</code> appears in a machine response with <strong>no preceding write</strong> → machine-issued, and the question becomes whether <code>{[AH 1]}</code> re-enables it.</li>
+</ul>
+<p>No such capture exists. The bridge relays frames but does not record them — verified Aug 7, 2026: <code>grep -n "_log" artisan_mcp/roaster.py</code> logs port open/close only, and the audit log holds decisions (<code>write</code>, <code>arm</code>, <code>probe</code>), never wire traffic. <strong>Phase 1 is one file.</strong></p>
+</div>
+
+<h2>What is established</h2>
+
+<p>Derived Aug 6–7, 2026 from 60 profiles in <code>~/Documents/Claude/Projects/roasting/Logs/</code>, by reading the <code>AH</code> channel (extra device 140, Kaleido Drum/AH) out of each <code>.alog</code>.</p>
+
+<h3>The cut is real, tight, and old</h3>
+
+<table>
+<tr><th>roast</th><th>AH 1→0 at</th><th>BT</th><th>°C</th><th>DROP marked</th><th>order</th></tr>
+<tr><td>#23</td><td>18:35</td><td>320.5</td><td>160.3</td><td>18:32</td><td>DROP first</td></tr>
+<tr><td>#24</td><td>32:16</td><td>324.5</td><td>162.5</td><td>32:10</td><td>DROP first</td></tr>
+<tr><td>#26</td><td>18:55</td><td>320.9</td><td>160.5</td><td>18:52</td><td>DROP first</td></tr>
+<tr><td>#28</td><td>14:13</td><td>326.3</td><td>163.5</td><td>14:10</td><td>DROP first</td></tr>
+<tr><td>#29</td><td>2:05</td><td>335.8</td><td>168.8</td><td>2:05</td><td>same sample</td></tr>
+<tr><td>17:17 fragment</td><td>1:42</td><td>331.2</td><td>166.2</td><td><b>never</b></td><td><b>AH first</b></td></tr>
+</table>
+
+<p>Every cut falls between <strong>160.3 and 168.8 °C</strong>. This machine is configured in Fahrenheit but almost certainly computes in Celsius (see <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> Finding 1), so a limit near 165 °C is a rounder number than the Fahrenheit spread suggests.</p>
+
+<p><strong>It is not new and not caused by Artisan's PID.</strong> The same <code>AH</code> transition appears in December 2025, January, April and June 2026 logs — 1000 g batches running the machine's own program, long before Artisan was driving the setpoint. Written down because the obvious hypothesis is that the recent PID work caused it, and the logs say otherwise.</p>
+
+<p><strong>It is soft, not a hard ceiling.</strong> b13 (<code>2026-01-25_1411</code>) reached 347.9 °F and b01/b02 reached 341.6. So the limit is exceedable under some condition nobody has identified — which is itself evidence that it is a setting rather than a fuse.</p>
+
+<h3>Artisan's automatic DROP paths are all ruled out</h3>
+
+<p>This matters because <code>ArduinoPID.pidOffDROP = True</code>: marking DROP cuts the burner within seconds, so any stray DROP mark looks exactly like a machine fault. Each path checked individually, Aug 7, 2026:</p>
+
+<ul>
+  <li><strong>Auto-DROP</strong> (<code>canvas.py:5180</code>, fires above 320 °F, 7 min in, on a <code>BTbreak()</code> dip) — <em>was</em> the cause of the #23/#24/#26 cuts. Now disabled: <code>defaults read org.artisan-scope.Artisan autoDrop</code> → <code>0</code>, and it survived Artisan's own quit-and-rewrite. #28 and #29 cut anyway.</li>
+  <li><strong>Kaleido event flags</strong> — provably inert on this machine. <a href="kaleido-machine-adaptations.html">Finding 2</a> established <code>sid</code> is always 0, so <code>sid &amp; 15</code> can never produce the DROP flag. The setting is also absent, so all seven default False.</li>
+  <li><strong>Background playback DROP</strong> — <code>backgroundPlaybackDROP</code> defaults to <code>False</code> (<code>canvas.py:1572</code>) and is absent from the plist.</li>
+  <li><strong>Alarms</strong> — the two installed are action <code>19</code> (PID ON) and <code>1</code> (Call Program). Neither can mark DROP; that is action <code>14</code>.</li>
+</ul>
+
+<h3>The counter-example that carries the argument</h3>
+
+<p>In <code>#_26-08-06_1717.alog</code>, <code>timeindex[6] = 0</code> — <strong>DROP was never marked</strong> — and <code>AH</code> went 1→0 at BT 331.2 °F while Artisan's PID was still commanding <code>HP 80</code>. Artisan cannot have cut the heat there. Something machine-side did.</p>
+
+<p>The other five all show DROP landing ~3 s <em>before</em> the <code>AH</code> fall, which is the <code>pidOffDROP</code> signature. <strong>But that ordering is not trustworthy at this resolution:</strong> <code>AH</code> is a smoothed extra-device curve sampled at ~1 Hz, so a real machine-side cut could plausibly render three samples late, behind a DROP the operator pressed on seeing the heat die. Phase 1 exists because this ambiguity cannot be resolved from <code>.alog</code> files at all.</p>
+
+<h2>What we cannot observe, and why it constrains the method</h2>
+
+<p><a href="kaleido-machine-adaptations.html">Finding 3</a> is load-bearing here: <strong>this machine never reports <code>HS</code></strong>, the "heater is firing" flag. So there is no confirmation signal for heat at all. <code>HP</code> is a <em>commanded</em> value and keeps reading 80 or 90 after the cut; <code>AH</code> is the only machine-reported heat state available.</p>
+
+<p>Consequently every experiment below infers heat from <strong>BT actually rising</strong>, not from any status word. An <code>{[AH 1]}</code> that is acknowledged but changes nothing would be indistinguishable from success on the status word alone.</p>
+
+<h2>Phase 1 — record the wire (no writes, nobody needed)</h2>
+
+<p>Add frame logging to the bridge. Every request and response, with a monotonic timestamp and direction, appended as JSON lines to <code>~/.artisan-mcp/frames.jsonl</code>.</p>
+
+<ul>
+  <li><code>artisan_mcp/roaster.py</code> — log in <code>SerialLink.request()</code>, which already has both the outgoing frame and the response line in one place.</li>
+  <li><code>artisan_mcp/bridge.py</code> — tag direction (<code>artisan</code> for relayed requests, <code>bridge</code> for injected ones, <code>machine</code> for responses) so a write from Artisan is distinguishable from one the bridge injected.</li>
+  <li>Rotate or cap the file: a 20-minute roast at ~1 Hz is only a few thousand lines, so size is not a real concern, but an unbounded log across many roasts is.</li>
+</ul>
+
+<p>Then run one roast through the bridge to the cut. This requires reconfiguring Artisan to Kaleido-over-network (Config ▸ Device ▸ Kaleido, <code>127.0.0.1</code> : <code>8765</code>) so the bridge owns the serial port — reversible in the same dialog.</p>
+
+<p><strong>Read the capture around the <code>AH</code> transition.</strong> That answers the top-level question without writing anything to the machine.</p>
+
+<h2>Phase 2 — if machine-issued, characterise the limit (still no writes)</h2>
+
+<p>All read-only, all safe to run repeatedly:</p>
+
+<ul>
+  <li><strong>Does <code>AH</code> return on its own?</strong> The owner's restart-the-roast workaround suggests it does. The capture will show whether <code>AH</code> flips back to 1 spontaneously, or only after Artisan re-initialises the connection.</li>
+  <li><strong>Is the trigger BT or ET?</strong> BT at the six cuts spans 160.3–168.8 °C; compute the ET spread across the same events. If ET is tighter, the machine is limiting on air/element temperature and the fix is airflow, not setpoint.</li>
+  <li><strong>Is there a readable limit variable?</strong> The known tags are <code>BT ET AT TS HP FC RC AH HS EV CS SC CL SN TU PI RD</code>. Probe for an unlisted one with a bare read. <em>This is guessing</em> — flagged as such, and worth perhaps twenty minutes, not an afternoon. A bare read of an unknown tag returned <code>{0}</code> for <code>TU</code> and <code>SN</code> already, so a null result is uninformative rather than conclusive.</li>
+</ul>
+
+<h2>Phase 3 — can it be overridden (writes; owner at the roaster)</h2>
+
+<p><strong>Ordering is not optional here.</strong> <a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> closes by stating that no write has ever been sent to this machine, and that the first should be a fan or drum command on a cold empty machine, watched. That guardrail governs this phase; do not start at step 3.</p>
+
+<ol>
+  <li><strong>Cold, empty, watched:</strong> <code>{[FC 30]}</code>. Establishes that this machine accepts a write at all, and what it acknowledges with. Nothing here is roast-critical.</li>
+  <li><strong>Cold, empty, watched:</strong> <code>{[AH 1]}</code>, then poll <code>RD A0</code>. Does <code>AH</code> read back 1, and does it stay 1? This is the override mechanism tested with no heat in the drum and no beans at risk.</li>
+  <li><strong>Mid-roast, owner at the machine, hand on the panel:</strong> when the capture shows <code>AH</code> fall, inject <code>{[AH 1]}</code> and watch <strong>BT</strong>. Heat resumed is the only proof; an acknowledged frame is not, because <code>HS</code> does not exist here.</li>
+</ol>
+
+<p>Step 3 is the experiment that answers the title. It is also the only one that puts heat into a drum holding beans, and it must not be run unattended.</p>
+
+<h2>Decisions</h2>
+
+<p>Both are stated in the meta tags so <code>specs.sh prune</code> surfaces them; repeated here so the reasoning survives.</p>
+
+<ul>
+  <li><strong>Authorise writes to the physical roaster for this investigation?</strong> Recommended <strong>yes, staged</strong> as ordered above. Phases 1 and 2 answer most of the question with no write at all, so the authorisation is only needed once the read-only evidence points at an override being possible. Blocks Phase 3 only.</li>
+  <li><strong>If the cut is machine-issued and non-overridable, retarget to 335 °F?</strong> Recommended <strong>yes</strong>. 32 completed roasts cluster at a 328 °F median with the band running 323–338; the owner's tasting notes record 335 golden and 339 burnt. The reliable ceiling and the preferred result are the same number, so 350 was always fighting the machine for a worse roast. Does not block.</li>
+</ul>
+
+<h2>Verified, assumed, and untested</h2>
+
+<ul>
+  <li><strong>Verified Aug 6–7, 2026 from the profile files:</strong> the six <code>AH</code> transitions and their BT values; the DROP-vs-cut ordering; that the cut appears in Dec 2025 through Jun 2026 logs; that b13 exceeded it at 347.9 °F; the 32-roast DROP median of 328.3 °F; and RoR rising through the roast (first quarter 3.9 °F/min, last quarter 10.4).</li>
+  <li><strong>Verified against live settings:</strong> <code>autoDrop = 0</code> persisting across an Artisan restart, <code>pidOffDROP = True</code>, both alarm actions, and the absence of <code>backgroundPlaybackDROP</code> and <code>kaleidoEventFlags</code>.</li>
+  <li><strong>Read from source, not observed:</strong> the auto-DROP trigger conditions at <code>canvas.py:5180</code>, the playback-DROP gate at <code>canvas.py:5417</code>, and the alarm action indices. Line numbers against <code>784effc8</code>.</li>
+  <li><strong>Inferred, not measured:</strong> that the limit is ~165 °C. Six samples spanning 8.5 °C is a cluster, not a constant, and no limit value has been read out of the machine.</li>
+  <li><strong>Not tested — no write has ever been sent to this machine.</strong> Whether <code>{[AH 1]}</code> is even accepted is unknown. Whether it would be honoured above the limit is the open question, not a detail.</li>
+  <li><strong>Not resolved:</strong> why b13 and b01/b02 exceeded the band. Until that is explained, "hard limit" is the wrong word and any conclusion drawn from the six-sample cluster is provisional.</li>
+</ul>
+
+</div>
+</body>
+</html>
