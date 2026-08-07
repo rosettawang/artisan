@@ -15,6 +15,18 @@
 
 <p><a href="index.html">← Specs index</a></p>
 
+<div class="callout">
+<h4>Governing principle, set by the owner Aug 6, 2026</h4>
+<p><em>"You're supposed to build [the interface] off of what buttons I click."</em></p>
+<p>So this spec is not "pick a sensible subset of Artisan's controls". It is: <strong>instrument which controls are actually pressed during real roasts, and derive the interface from that record.</strong> A button palette chosen by reasoning about what a roaster probably needs is a guess; a palette chosen from a month of logged presses is a measurement.</p>
+<p>Two consequences worth stating before any layout is drawn:</p>
+<ul>
+  <li><strong>Instrumentation comes before design.</strong> Log every event-button and slider action with its roast time. Artisan already records event actions into the profile, so much of this may be recoverable from the 46 existing <code>.alog</code> files without writing anything — <em>check that before building a logger.</em></li>
+  <li><strong>The evidence outranks the recommendation.</strong> If the log says a control this spec calls essential is never touched, the log wins.</li>
+</ul>
+<p>This also settles why <a href="control-handover-and-ui.html">the UI_mode question</a> was withdrawn: choosing among Artisan's three built-in menu presets is configuring someone else's design. Building from click evidence is the point of the fork.</p>
+</div>
+
 <h1>A roasting UI with only the buttons this roast needs</h1>
 
 <p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. It is a configuration job with <strong>no code at all</strong> — including the switch, which already exists as <kbd>⌘</kbd>+number.</p>

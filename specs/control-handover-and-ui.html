@@ -6,7 +6,6 @@
   <title>Loading a plan is not consenting to be driven by it</title>
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/pid_control.py src/artisanlib/pid_dialogs.py src/artisanlib/main.py" />
-  <meta name="spec-decision" content="Drop UI_mode from EXPERT to DEFAULT? Recommended yes, DEFAULT (2) rather than PRODUCTION (3). PRODUCTION hides the whole Tools menu, and the Designer lives there. Settings-only, instantly reversible, no code. Does not block." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -62,6 +61,15 @@ all off      Background …/nut-dry-and-roast-335F.alog loaded successfully
 </ul>
 <p><strong>This narrows the principle rather than abandoning it.</strong> A reference action must not <em>quietly</em> become a control action — quietly is the operative word, and both of the owner's answers point the same way: applying is correct here, applying in silence is not.</p>
 <p><em>The one thing that would reopen this:</em> charging beans without wanting the burner driven — a warm-up, a test, a manual batch. If that ever becomes routine, off is safer, because a flag that is right most of the time is worse than an explicit press.</p>
+</div>
+
+<div class="callout">
+<h4>Decided Aug 6, 2026 — <strong>stay on EXPERT</strong>, and the question was wrong anyway</h4>
+<p>This spec recommended dropping to DEFAULT. <strong>Withdrawn</strong>, for two reasons, the second bigger than the first.</p>
+<p><strong>It would hide the tools this project uses.</strong> Checked after recommending, which was the wrong order: <code>Config ▸ Device</code> and <code>Config ▸ Comm Port</code> are EXPERT-only (<code>main.py:4279</code>), as are <code>Tools ▸ Simulator</code>, Analyze, Transform, Statistics and Colors. Device is the dialog holding the Kaleido WiFi/serial toggle and the event flags — the one this whole project keeps sending the owner to. DEFAULT would remove it.</p>
+<p><strong>And menu density was never the point.</strong> Owner: <em>"I am trying to build a new UI, so that's the point of this fork."</em> Choosing between three built-in menu-density presets is configuring the app someone else designed. This fork exists to build an interface for this roastery, which is a different activity, and picking a preset would have quietly substituted the smaller question for the larger one.</p>
+<p>Also worth knowing the mode was never chosen: <code>main.py:18119</code> migrates <em>existing</em> users to EXPERT while new installs get DEFAULT. It was inherited.</p>
+<p>The real work is <a href="roasting-ui.html">roasting-ui</a>, and the owner set its direction: <strong>"build the UI off of what buttons I click."</strong> That is instrumentation-first design — record which controls actually get pressed during real roasts, then build the interface from the evidence rather than from a guess about what a roaster needs. Recorded there as the governing principle.</p>
 </div>
 
 <h2>What actually happens, in order</h2>
