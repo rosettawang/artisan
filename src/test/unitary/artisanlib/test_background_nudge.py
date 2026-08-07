@@ -55,6 +55,9 @@ class StubQmc:
         self.background_nudges: list[dict[str, Any]] = []
         self.aw = StubAW(pidcontrol)
 
+    # recordBackgroundNudge calls this on self, so bind the real implementation
+    pidActiveFollowingBackground = tgraphcanvas.pidActiveFollowingBackground
+
 
 # -- the record ------------------------------------------------------------
 
@@ -107,12 +110,9 @@ def test_empty_channels_do_not_raise() -> None:
 
 def test_recording_never_propagates_an_error() -> None:
     """A logging failure must never take down a nudge mid-roast."""
-    class Exploding(StubQmc):
-        @property
-        def background_nudges(self):  # type: ignore[override]
-            raise RuntimeError('boom')
-
-    record(Exploding(), 'left', 50)  # swallowed, not raised
+    q = StubQmc()
+    q.background_nudges = None  # type: ignore[assignment]  # .append will raise
+    record(q, 'left', 50)  # swallowed, not raised
 
 
 # -- the PID-follow warning ------------------------------------------------
