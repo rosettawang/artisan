@@ -7,7 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/kaleido.py src/artisanlib/devices.py src/artisanlib/comm.py src/artisanlib/pid_dialogs.py src/artisanlib/designer.py" />
   <meta name="spec-decision" content="Send the CP210x EINVAL message upstream as a PR? Recommended yes — it is a generic macOS serial fault with no Artisan-specific content, and every Kaleido/Hottop/TC4 user on a Silicon Labs adapter hits it. Does not block; the local fix lands either way." />
-  <meta name="spec-decision" content="Grey out the Kaleido event-flag checkboxes when the machine has only ever reported sid low-nibble 0? Recommended no — do it as a tooltip note instead. Greying out on observed behaviour is stateful UI that will be wrong on the first machine that reports events late. Does not block." />
   <meta name="spec-decision" content="What is the auto-generated ET channel in BT-only mode actually for — only to satisfy the two-channel .alog format, or a reference curve read while roasting? Recommended: answer this before touching designer.py's et_offset. If it is format-filler, label the field with its unit and stop; if it is read while roasting, the -50 constant must become unit-aware. BLOCKS Finding 5 — the fix differs by answer." />
   <link rel="stylesheet" href="spec.css" />
 </head>

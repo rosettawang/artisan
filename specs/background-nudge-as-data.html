@@ -7,9 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/canvas.py src/artisanlib/main.py" />
   <meta name="spec-needs" content="control-handover-and-ui" />
-  <meta name="spec-decision" content="Persist backgroundprofile_moved_x/y into the saved profile and the roast record? Recommended YES — it is the single most informative number about how wrong the plan was, it already exists in memory, and it is currently reset to 0 in five places and never written to disk. Cheap: one field in save/load. Does not block." />
-  <meta name="spec-decision" content="Warn or refuse when the background is nudged while the PID is following it? Recommended WARN, not refuse. With svMode=2 and PID on, dragging the reference curve moves the setpoint the burner is chasing, live and silently -- but mid-roast re-alignment is a legitimate thing to want, and refusing it would take away a real tool. A message-line note naming the new offset is enough. Does not block." />
-  <meta name="spec-decision" content="Should align-on-event replace manual nudging for the CHARGE case? Recommended: offer it, do not force it. Artisan already has timealign()/alignEvent (canvas.py:5938) which anchors the background to the foreground on CHARGE/DRY/FCs/DROP. That is the principled version of a left/right nudge and it is exact. But it cannot express 'the whole plan was optimistic', which is what a mid-roast nudge often means. Does not block." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -63,6 +60,16 @@
 </table>
 
 <p>Worth saying plainly: <strong>if the usual reason for nudging is a late or early charge, <code>alignEvent = 0</code> (CHARGE) already solves it exactly and automatically.</strong> Try that before building anything. The nudge-as-data work below is for the residual case where the shape itself needs revising.</p>
+
+<h2>Decided here, not queued</h2>
+
+<p>Three calls that were briefly written up as owner decisions and should not have been. All three are engineering, cheap and reversible; none needs roasting knowledge.</p>
+
+<ul>
+  <li><strong>Persist the offset — yes.</strong> The number already exists in memory and is thrown away; writing it to the profile is one field in save/load. There is no argument on the other side.</li>
+  <li><strong>Nudging while the PID follows: warn, do not refuse.</strong> Refusing would remove a legitimate mid-roast tool to prevent a surprise, which is the wrong trade. A message-line note naming the new offset is enough. The defect is that it is <em>silent</em>, not that it is possible.</li>
+  <li><strong>Align-on-event: offer it, do not force it.</strong> <code>alignEvent = 0</code> already solves the late-charge case exactly, so it should be surfaced as the first thing to try — but it cannot express "the whole plan was optimistic", so manual nudging stays.</li>
+</ul>
 
 <h2>The proposal</h2>
 

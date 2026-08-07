@@ -6,8 +6,6 @@
   <title>Listening for cracks, and using the machine's own state to know what to ignore</title>
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/crack_listener.py src/artisanlib/main.py src/requirements.txt" />
-  <meta name="spec-decision" content="Is 'more crackling means too much moisture, so extend drying' an established fact or a working hypothesis? Recommended: treat it as the owner's hypothesis and build Phase A/B to TEST it, not to act on it. The roast log already carries humidity for 15 roasts (10.1-12.7%) but no crack measurement, which is exactly the missing variable. Nothing should auto-extend drying until the correlation is shown on this machine, with this product. Does not block — it shapes what Phase D is allowed to do." />
-  <meta name="spec-decision" content="Microphone: built-in Mac mic, or a dedicated mic near the drum? Recommended a cheap USB mic clamped near the drum head. The Mac's mic is metres away, aimed at the room, and gain-controlled by macOS — AGC alone will defeat onset detection by pumping the noise floor. Blocks Phase A: the calibration recordings should be made with whatever mic will be used for real." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -120,11 +118,16 @@
 
 <p>Mechanically plausible: crack vigour comes from steam pressure, so wetter material should crack harder. But <strong>it is a hypothesis about this product on this machine, and it has never been measured</strong> — which is precisely what makes it worth instrumenting.</p>
 
+<p><strong>Treated as a hypothesis throughout, and that is a methodological choice rather than a question for the owner.</strong> The consequence is concrete: nothing in this spec auto-extends drying. Phases A–C produce the measurement; only if C shows a correlation does D act on it, and even then advisory. If it turns out the claim is already settled fact for bay nuts, nothing here is wasted — the instrument still has to exist to use it.</p>
+
 <p>The roast log is already half of the experiment. <code>Humidity %</code> is recorded for <strong>15 of 31 roasts, ranging 10.1–12.7%</strong>, alongside soak/cure duration and drying method. What is missing is any measure of crackling. One note gets close — <em>"too large a batch; popping at 216°F; foot-smelling from Cabello's dryer"</em> — which shows the observation is already being made by hand, in prose, unquantified.</p>
 
 <p>So Phase B's real output is not a feature; it is <strong>a column</strong>. Once crack density sits beside humidity for a dozen roasts, the hypothesis is either visible or it is not. Until then nothing should automatically extend anything.</p>
 
 <p><em>Complication worth stating up front:</em> the owner's own notes record <strong>two crack ranges — 217–218 °F and 228–231 °F</strong>. Coffee's first and second crack are far further apart and acoustically distinct. Whether these are two populations, two mechanisms, or one event with a gap is unknown, and a detector that assumes a single "first crack" will describe this product badly.</p>
+
+<h2>Microphone: dedicated, near the drum</h2>
+<p><strong>Decided.</strong> Not the Mac's built-in: it sits metres away aimed at the room, and macOS applies automatic gain control, which pumps the noise floor up and down and defeats onset detection by construction — the very thing the whole design depends on. A cheap USB mic clamped near the drum head, with AGC off, is the requirement. The only owner-facing part is buying one, which is a purchase and not a design decision, so it is noted here rather than queued as a question.</p>
 
 <h2>Phases</h2>
 

@@ -792,29 +792,75 @@ except ImportError:
     from PyQt5.QtGui import QKeySequence
 
 
+def designer_temp_unit() -> str:
+    """The unit this designer should speak, taken from Artisan's own setting.
+
+    The standalone designer has no ApplicationWindow to ask, but it shares the
+    preferences domain, so `Mode` is readable directly. Everything in this module
+    was originally hardcoded to Celsius -- labels, axis and the ET offset -- while
+    an owner roasting in Fahrenheit typed Fahrenheit numbers into fields captioned
+    (deg C). Returns 'C' or 'F'; 'C' if the setting is missing or unreadable.
+    """
+    try:
+        mode = QSettings().value('Mode', 'C')
+        return 'F' if str(mode).upper().startswith('F') else 'C'
+    except Exception:  # pylint: disable=broad-except
+        return 'C'
+
+
+def c_to(value: float, unit: str) -> float:
+    """Convert a Celsius constant to `unit`. Identity when unit is 'C'."""
+    return round(value * 9.0 / 5.0 + 32.0, 1) if unit == 'F' else value
+
+
+def c_delta_to(delta: float, unit: str) -> float:
+    """Convert a Celsius *difference* to `unit` -- no +32, it is an interval."""
+    return round(delta * 9.0 / 5.0, 1) if unit == 'F' else delta
+
+
 class DesignerData:
     """Data model for standalone roast profile design"""
-    
+
     def __init__(self):
-        # Initialize with factory defaults
+        self.temp_unit = designer_temp_unit()
+        u = self.temp_unit
+        # Factory defaults are written in Celsius and converted, so they keep
+        # meaning the same roast rather than becoming nonsense numbers in F.
         factory_defaults = {
-            'CHARGE': {'time': 0, 'BT': 80.0, 'ET': 70.0, 'enabled': True},
-            'DRY_END': {'time': 240, 'BT': 150.0, 'ET': 110.0, 'enabled': True},  # 4:00
-            'FC_START': {'time': 420, 'BT': 190.0, 'ET': 140.0, 'enabled': True},  # 7:00
-            'FC_END': {'time': 480, 'BT': 205.0, 'ET': 155.0, 'enabled': True},   # 8:00
-            'SC_START': {'time': 540, 'BT': 220.0, 'ET': 170.0, 'enabled': False}, # 9:00
-            'SC_END': {'time': 600, 'BT': 235.0, 'ET': 180.0, 'enabled': False},  # 10:00
-            'DROP': {'time': 660, 'BT': 210.0, 'ET': 165.0, 'enabled': True}      # 11:00
+            'CHARGE': {'time': 0, 'BT': c_to(80.0, u), 'ET': c_to(70.0, u), 'enabled': True},
+            'DRY_END': {'time': 240, 'BT': c_to(150.0, u), 'ET': c_to(110.0, u), 'enabled': True},  # 4:00
+            'FC_START': {'time': 420, 'BT': c_to(190.0, u), 'ET': c_to(140.0, u), 'enabled': True},  # 7:00
+            'FC_END': {'time': 480, 'BT': c_to(205.0, u), 'ET': c_to(155.0, u), 'enabled': True},   # 8:00
+            'SC_START': {'time': 540, 'BT': c_to(220.0, u), 'ET': c_to(170.0, u), 'enabled': False}, # 9:00
+            'SC_END': {'time': 600, 'BT': c_to(235.0, u), 'ET': c_to(180.0, u), 'enabled': False},  # 10:00
+            'DROP': {'time': 660, 'BT': c_to(210.0, u), 'ET': c_to(165.0, u), 'enabled': True}      # 11:00
         }
-        
-        # Load saved defaults or use factory defaults
+
+        # Load saved defaults or use factory defaults.
+        # NOTE: saved defaults are stored as bare numbers with no unit recorded, so
+        # they are returned as-is. Switching Artisan between C and F after saving
+        # defaults will surface them unconverted. Not fixed here: converting saved
+        # values on a guess would corrupt them.
         self.landmarks = self.load_defaults(factory_defaults)
-        
+
         self.curviness = 2  # Single curviness value for both curves
-        
+
         # BT-only mode settings
         self.bt_only_mode = False
-        self.et_offset = -50.0  # ET = BT + offset (negative means ET is lower than BT)
+        # ET = BT + offset. An interval, so it converts without the +32 term:
+        # -50 C becomes -90 F, keeping the same physical gap in either unit.
+        #
+        # This value does NOT drive the roast. Verified Aug 6, 2026: with
+        # pidSource=1 (BT) and svMode=2 (Follow background), the PID takes its
+        # setpoint from the background BT curve via backgroundSmoothedBTat, never
+        # ET (pid_control.py:1691, 'followCurveNr = self.pidSource'). The only
+        # other reader of background ET is the Curve Match device (186), which is
+        # not among the configured extra devices. So the generated ET is there to
+        # satisfy the two-channel .alog format and to be drawn.
+        #
+        # It would start mattering the moment pidSource were set to 2 (ET) while
+        # Follow mode is on -- then this synthetic curve becomes the setpoint.
+        self.et_offset = c_delta_to(-50.0, self.temp_unit)
         
         # Generate default name with timestamp
         import datetime

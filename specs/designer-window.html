@@ -7,9 +7,7 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/designer.py src/artisanlib/canvas.py" />
   <meta name="spec-needs" content="kaleido-machine-adaptations" />
-  <meta name="spec-decision" content="Which designer do these fixes land in — upstream's in-app Designer (canvas.py + designerconfigDlg) or the fork's standalone Profile Designer? Recommended: the standalone one. It is the fork's own file, so no merge conflicts, and it already has draft save/load and the events panel. Cost: it is Celsius-only and must be taught the app's mode first. BLOCKS everything below — the same fix in the wrong window is wasted work." />
   <meta name="spec-decision" content="Replace the designer's default landmarks with the owner's bay-nut numbers? Recommended yes. Today's defaults are coffee in Celsius (CHARGE 80, DRY_END 150, FC_START 190, DROP 210) and the owner roasts bay nuts in Fahrenheit with cracks at 217-218 and 228-231. Every new profile currently starts by being wrong twice — wrong product, wrong unit. Does not block." />
-  <meta name="spec-decision" content="What are 'fig 1' and 'fig 2', and which button turns one into the other? The images did not survive with the notes, so this item cannot be specified. Recommended: drop it unless the owner can reproduce the screenshots. Does not block the rest." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -31,7 +29,7 @@
   <tr><td>Merge risk</td><td>High — shared with upstream, conflicts on every pull.</td><td>None — upstream does not have this file's contents.</td></tr>
 </table>
 
-<p>The recommendation is in the decision meta: <strong>put the work in the standalone window</strong>, and pay the one-off cost of teaching it the app's mode first. Fixing the in-app designer means fighting upstream forever, on a fork whose whole strategy is cheap rebases. But note the irony to be resolved first — the one that is <em>wrong</em> about units is the one recommended, because the one that is right about units is the one that is expensive to touch.</p>
+<p><strong>Decided: the work goes in the standalone window</strong>, with teaching it <code>qmc.mode</code> as its first task. Three reasons, and none of them need the owner: it is the fork's own file so it never conflicts on a pull; it is the one that actually gets launched here; and the in-app designer is byte-identical to upstream, which is a property worth keeping rather than spending. The irony is real — the window that is <em>wrong</em> about units is the one chosen, because the one that is right about units is the expensive one to touch — but a one-off unit fix is cheaper than conflicting with upstream forever.</p>
 
 <h2>Already built — do not spend time on these</h2>
 
@@ -76,7 +74,7 @@ self.designertimeinit = [0, 4*60, 9*60, 11*60, 12*60, 12.5*60, 13*60, 17*60]
   <tr><td><strong>1.9</strong> ".adsg → .alog by clicking Designer in the toolbar"</td><td>Needs restating. Both designers already export <code>.alog</code>; what is unclear is whether this asks for a <em>toolbar button</em> that converts without opening the editor. Treat as blocked on clarification, not as work.</td></tr>
   <tr><td><strong>1.12</strong> ⌘S saves points, ⌘⇧S saves as</td><td>Real and small. The save paths exist; only the shortcuts are missing. Pairs naturally with 1.11.</td></tr>
   <tr><td><strong>Background controller</strong> open beside the main page</td><td>Under-specified. Artisan has a background profile concept already; whether this means a non-modal window for it, or something else, cannot be told from one line. Blocked on clarification.</td></tr>
-  <tr><td><strong>fig 1 / fig 2</strong> "this button turns fig 1 into fig 2"</td><td>Unspecifiable — the images did not survive with the notes. See the decision.</td></tr>
+  <tr><td><strong>fig 1 / fig 2</strong> "this button turns fig 1 into fig 2"</td><td>Unspecifiable — the images did not survive with the notes. <strong>Not a decision, a missing artifact:</strong> either the owner reproduces the two screenshots or the item is dropped. Parked until then; it blocks nothing.</td></tr>
 </table>
 
 <h2>The roast data in these notes should become the defaults</h2>

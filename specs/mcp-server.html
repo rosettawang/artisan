@@ -7,7 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/mcp_server.py src/artisanlib/main.py src/requirements.txt src/artisan-mac.spec" />
   <meta name="spec-needs" content="control-handover-and-ui" />
-  <meta name="spec-decision" content="Transport: streamable-http on 127.0.0.1, not SSE. SSE is the deprecated MCP transport and Artisan would carry it forever. Does not block — recommended default, build it unless overruled." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -82,7 +81,7 @@
 
 <p>Every MCP example is stdio. <strong>Artisan cannot use stdio</strong> — it is a GUI application that owns its own stdin/stdout, and there is no parent process launching it as a subprocess. The server must listen on a socket and Claude must connect by URL.</p>
 
-<p>Verified Aug 6, 2026 against <code>mcp==2.0.0</code>: <code>MCPServer</code> exposes <code>run_streamable_http_async</code>, <code>run_sse_async</code> and <code>streamable_http_app</code>. Streamable-HTTP is the recommendation (see decision); SSE is the deprecated transport and a fork would carry it indefinitely.</p>
+<p>Verified Aug 6, 2026 against <code>mcp==2.0.0</code>: <code>MCPServer</code> exposes <code>run_streamable_http_async</code>, <code>run_sse_async</code> and <code>streamable_http_app</code>. <strong>Decided: streamable-HTTP, bound to 127.0.0.1.</strong> SSE is the deprecated MCP transport and a fork would carry it indefinitely; there is no upside to adopting it now. This was an engineering call with no roasting or business dimension, so it is taken rather than queued.</p>
 
 <p><strong>There is already a precedent in-tree for this exact shape.</strong> <code>artisanlib/weblcds.py</code> runs an aiohttp server on a background thread with its own asyncio loop (<code>WebView</code>, <code>_loop</code> / <code>_thread</code> / <code>_runner</code>), started and stopped from the GUI. Copy that lifecycle rather than inventing one — same threading model, same shutdown discipline, same failure surface.</p>
 
