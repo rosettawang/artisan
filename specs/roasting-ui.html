@@ -6,7 +6,6 @@
   <title>A roasting UI with only the buttons this roast needs</title>
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/main.py" />
-  <meta name="spec-decision" content="Which buttons belong in the minimal set? Recommended: START/STOP, CHARGE, DROP, the three sliders (Burner/Air/Drum), and background nudge left/right — derived from what this session watched being used, not from a survey. Does not block: the palette can be built, tried on one roast, and edited. This is the only part that needs the owner, because it is about how they roast." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -28,6 +27,31 @@
 </div>
 
 <h1>A roasting UI with only the buttons this roast needs</h1>
+
+<div class="callout">
+<h4>The click evidence, Aug 6, 2026 — the principle applied, and the logger was unnecessary</h4>
+<p>The governing principle says derive the interface from what is actually pressed, and check the existing profiles before building a logger. <strong>Checked: no logger is needed.</strong> Artisan already writes every event action into the profile — <code>specialevents</code>, <code>specialeventstype</code>, <code>specialeventsvalue</code>. Across <strong>69 recorded roasts: 15,310 presses, median 149 per roast.</strong></p>
+<table>
+  <tr><th>Control</th><th>Presses</th><th>Share</th><th>What it means</th></tr>
+  <tr><td><strong>Burner</strong></td><td>14,777</td><td><strong>96.5%</strong></td><td>The roast is essentially one control operated continuously.</td></tr>
+  <tr><td>Air</td><td>399</td><td>2.6%</td><td>Occasional. Values cluster at 30/40/50/60%.</td></tr>
+  <tr><td>Drum</td><td>112</td><td>0.7%</td><td>Mostly a single value, 40% — set once and left.</td></tr>
+  <tr><td>Damper</td><td><strong>0</strong></td><td>0%</td><td>Configured as an event type and <strong>never once used</strong>.</td></tr>
+</table>
+<p><strong>How the burner is actually driven</strong>, from 14,719 consecutive changes:</p>
+<table>
+  <tr><th>Step</th><th>Share</th></tr>
+  <tr><td>±5%</td><td>30.9% — the single commonest move</td></tr>
+  <tr><td>±10%</td><td>26.9%</td></tr>
+  <tr><td>fine adjustment (|step| ≤ 10%)</td><td><strong>57.9%</strong></td></tr>
+  <tr><td>jumps (|step| &gt; 10%)</td><td>42.0%</td></tr>
+</table>
+<p><strong>Only 53.7% of burner values land on a round 10%.</strong> The other 46.3% sit on 5% boundaries — 45%, 65%, 35% — which <em>the 42-button grid cannot produce</em>, since its buttons are 10% steps. So the grid was never the whole story: something with 5% resolution has been doing most of the work.</p>
+<h4>What this does to the palette already built</h4>
+<p><strong>Mostly vindicated, one real gap.</strong> Burner and air <code>++/--</code> are the right primitives — fine adjustment is 57.9% of all burner activity. Giving drum a slider and no buttons matches 0.7% usage at essentially one value. And <strong>Damper should be removed from the event types entirely</strong>: it occupies a channel and has never been touched in 69 roasts.</p>
+<p>The gap is the other 42%: <strong>jumps larger than 10% are frequent, and the minimal palette has no way to make one</strong> except dragging the slider. The earlier claim that "the sliders make the grid redundant" is <em>half right</em> — right for fine work, wrong for jumps. Before adding jump buttons, note the destination values are near-uniform across 0–80% with no favourites (45%×1205, 60%×1184, 35%×1126, 80%×1111 …), so there is no small set of presets to add. That is an argument for the slider, not for eight more buttons — but it should be settled by trying palette 3 for one roast and seeing whether reaching for the slider feels worse than the grid did.</p>
+<p><em>Re-derive with:</em> parse <code>specialeventstype</code>/<code>specialeventsvalue</code> from the profiles, decoding each value as <code>(v−1)×10</code> percent.</p>
+</div>
 
 <p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. It is a configuration job with <strong>no code at all</strong> — including the switch, which already exists as <kbd>⌘</kbd>+number.</p>
 

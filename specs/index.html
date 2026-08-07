@@ -92,11 +92,11 @@
   <li><a href="control-handover-and-ui.html">control-handover-and-ui</a> — Loading a plan is not consenting to be driven by it<br /><span class="meta" style="margin:0">shares <code>src/artisanlib/main.py</code>, <code>src/artisanlib/pid_dialogs.py</code></span></li>
   <li><a href="crack-listener.html">crack-listener</a> — Listening for cracks, and using the machine's own state to know what to ignore<br /><span class="meta" style="margin:0">shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
   <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
+  <li><a href="roasting-ui.html">roasting-ui</a> — A roasting UI with only the buttons this roast needs<br /><span class="meta" style="margin:0">shares <code>src/artisanlib/main.py</code></span></li>
   <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
   <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0">after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="designer-for-agents.html">designer-for-agents</a> — Two roast designers, and only one of them Claude can use<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/designer.py</code></span></li>
-  <li><a href="roasting-ui.html">roasting-ui</a> — A roasting UI with only the buttons this roast needs<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code></span></li>
   <li><a href="heat-cutoff-override.html">heat-cutoff-override</a> — Who cuts the heat at 165 °C, and can software override it<br /><span class="meta" style="margin:0"><strong>2 decisions waiting on the owner</strong> · after kaleido-machine-adaptations</span></li>
 </ol>
 <div class="callout warn">
@@ -114,14 +114,8 @@
 <h2 id="decisions">Decisions waiting on the owner</h2>
 <p>Choices only the owner can make — answer in any Claude session (in chat, or edit the spec's <code>spec-decision</code> meta). A session records the answer in the owning spec and the next prune drops it from here. It never silently picks a default and buries it in a commit.</p>
 <!-- GENERATED:DECISIONS:START -->
-<p class="meta">5 decisions across 4 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
+<p class="meta">4 decisions across 3 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
 <ul class="spec-decision-list">
-  <li>
-    <a href="roasting-ui.html">A roasting UI with only the buttons this roast needs</a>
-    <ul>
-      <li>Which buttons belong in the minimal set? Recommended: START/STOP, CHARGE, DROP, the three sliders (Burner/Air/Drum), and background nudge left/right — derived from what this session watched being used, not from a survey. Does not block: the palette can be built, tried on one roast, and edited. This is the only part that needs the owner, because it is about how they roast.</li>
-    </ul>
-  </li>
   <li>
     <a href="designer-for-agents.html">Two roast designers, and only one of them Claude can use</a>
     <ul>
