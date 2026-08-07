@@ -34,6 +34,22 @@
 </div>
 
 <div class="callout">
+<h4>Built Aug 6, 2026 — a background load now says what it applied</h4>
+<p>The half of the decision that survives. <code>loadbackground()</code> collects which of the four flags fired and reports them in the <code>{1}</code> slot the success message already reserved and always filled with an empty string:</p>
+<pre><code>all four on  Background …/nut-dry-and-roast-335F.alog loaded successfully
+             — applied from it: alarms, ramp/soak, PID settings, phases
+only PID on  Background …/nut-dry-and-roast-335F.alog loaded successfully
+             — applied from it: PID settings
+all off      Background …/nut-dry-and-roast-335F.alog loaded successfully
+</code></pre>
+<p>No gate, no prompt, no change to what a normal roast does — applying stays the default, per the owner. Verified by driving <code>loadbackground()</code> against a real profile with each flag combination; the owner's preferences were unchanged before and after.</p>
+<p><strong>Correction to this spec's own wording.</strong> It called these "four hidden always-on flags". They are not hidden — each has a checkbox: <code>Load p-i-d from background</code> (<code>pid_dialogs.py:793</code>), <code>Load from background</code> for ramp/soak (<code>:930</code>), the same label for alarms (<code>alarms.py:138</code>), and <code>From Background</code> for phases (<code>phases.py:106</code>). <strong>They are scattered across four dialogs and never shown together, and none of them appears at the moment they act.</strong> That is a weaker claim than "hidden" and it is the true one — which matters, because it means the remaining work is <em>gathering</em> existing controls rather than exposing buried state.</p>
+<p><strong>Still to do:</strong> gather the four into one visible setting that defaults to on. Not built — it touches three more dialogs, and the announcement already removes the silence that made this a finding.</p>
+</div>
+
+
+
+<div class="callout">
 <h4>Decided by the owner, Aug 6, 2026 — <strong>leave <code>pidOnCHARGE</code> ON</strong> and announce it. This spec recommended turning it off.</h4>
 <p>Owner: <em>"leave pidOnCHARGE ON, and add the announcement."</em></p>
 <p><strong>The "elegant fix is one flag" section below is superseded</strong> — kept rather than deleted, because its reasoning is still the reasoning, and only its conclusion changed. What it got wrong was an assumption it never stated: that an automatic handover is unwanted. For a roastery whose normal case is a guided roast with the PID following the background, the automation is the point. Turning it off would trade a surprise for an extra button press before every single roast.</p>

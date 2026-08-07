@@ -14418,17 +14418,29 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.roastbatchprefixB = ''
                     self.qmc.roastbatchposB = 1
 
+# Loading a background can silently rewrite the controller: four separate flags,
+# all on by default and none of them visible at load time, pull alarms, ramp/soak,
+# PID tuning and phase boundaries out of the file. The owner's decision (Aug 6,
+# 2026) is that applying is CORRECT here -- a background is the plan the roast is
+# driven from, not a reference sketch -- so this does not gate or prompt. What it
+# does is say what happened, in the {1} slot the success message already reserves.
+# See specs/control-handover-and-ui.html.
+                applied_from_background:list[str] = []
+
 # on request we load alarms from backgrounds, but keep in mind as this would overload the one of the foreground profile that automatically loads this background
                 if self.qmc.loadalarmsfrombackground:
                     self.loadAlarmsFromProfile(filename, self.qmc.backgroundprofile)
+                    applied_from_background.append(QApplication.translate('Message','alarms'))
 
                 # Ramp/Soak Profiles
                 if self.pidcontrol.loadRampSoakFromBackground:
                     self.loadRampSoakFromProfile(filename,self.qmc.backgroundprofile)
+                    applied_from_background.append(QApplication.translate('Message','ramp/soak'))
 
                 # PID settings
                 if self.pidcontrol.loadpidfrombackground:
                     self.loadPIDFromProfile(self.qmc.backgroundprofile)
+                    applied_from_background.append(QApplication.translate('Message','PID settings'))
 
 
                 #if old format < 0.5.0 version  (identified by numbers less than 1.). convert
@@ -14442,6 +14454,7 @@ class ApplicationWindow(QMainWindow):
                 if 'timeindex' in profile:
                     self.qmc.timeindexB = [max(0,min(v,data_len-1)) if i>0 else max(-1,min(v,data_len-1)) for i,v in enumerate(profile['timeindex'])]          #if new profile found with variable timeindex
                     if self.qmc.phasesfromBackgroundflag:
+                        applied_from_background.append(QApplication.translate('Message','phases'))
                         # adjust phases by DryEnd and FCs events from background profile
                         if self.qmc.timeindexB[1] and len(self.qmc.timeindexB) > 1 and len(self.qmc.temp2B) > self.qmc.timeindexB[1]:
                             val = self.qmc.temp2B[self.qmc.timeindexB[1]]
@@ -14491,7 +14504,11 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.end_weight_est = 1 # this weight out is an estimate as it was not measure nor manual set
 
 
-                message = QApplication.translate('Message', 'Background {0} loaded successfully {1}').format(filename, '')
+                applied_note = ''
+                if applied_from_background:
+                    applied_note = QApplication.translate('Message','— applied from it: {0}').format(
+                        ', '.join(applied_from_background))
+                message = QApplication.translate('Message', 'Background {0} loaded successfully {1}').format(filename, applied_note)
                 self.sendmessage(message)
                 self.qmc.backgroundpath = str(filename)
                 self.qmc.backgroundUUID = profile.get('roastUUID', None)
