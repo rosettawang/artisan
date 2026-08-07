@@ -838,6 +838,42 @@ def c_delta_to(delta: float, unit: str) -> float:
     return round(delta * 9.0 / 5.0, 1) if unit == 'F' else delta
 
 
+# ---------------------------------------------------------------------------
+# What this machine has taught us, in one place
+# ---------------------------------------------------------------------------
+#
+# These numbers were paid for with real roasts: a stalled batch, a burner that
+# bang-banged 0<->100, and an auto-heat cutoff found by watching the machine
+# ignore HP 85. They lived only in make_roast_curve.py and in a markdown command
+# file, which meant they protected exactly one of the two tools that make curves.
+#
+# Putting them in the model protects every path at once -- the GUI, the CLI, the
+# script and any future MCP tool, because they all go through DesignerData.
+# See specs/designer-for-agents.html.
+
+ROR_CEILING_F_PER_MIN: float = 12.0   # sustained rate of rise this machine can hold
+AUTO_HEAT_CUTOFF_F: float = 331.0     # BT at which the machine cuts its own auto-heat
+DEFAULT_TAIL_MINUTES: float = 5.0     # how far a curve must continue past DROP
+
+
+class DesignerValidation:
+    """Errors refuse the export; warnings are printed and the export proceeds."""
+
+    __slots__ = ['errors', 'warnings']
+
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def __str__(self) -> str:
+        out = [f'ERROR: {e}' for e in self.errors] + [f'warning: {w}' for w in self.warnings]
+        return '\n'.join(out) if out else 'curve looks sane'
+
+
 class DesignerData:
     """Data model for standalone roast profile design"""
 
@@ -911,6 +947,83 @@ class DesignerData:
         # Events and alarms
         self.events = []
     
+    def enabled_landmarks(self) -> list:
+        """(name, time, BT) for the landmarks in play, ordered by time."""
+        rows = [(n, e['time'], e['BT']) for n, e in self.landmarks.items()
+                if e.get('enabled', True) and 'time' in e and 'BT' in e]
+        rows.sort(key=lambda r: r[1])
+        return rows
+
+    def segment_rors(self) -> list:
+        """(from, to, degrees-per-minute) between consecutive enabled landmarks."""
+        rows = self.enabled_landmarks()
+        out = []
+        for (n1, t1, b1), (n2, t2, b2) in zip(rows, rows[1:]):
+            if t2 > t1:
+                out.append((n1, n2, (b2 - b1) / ((t2 - t1) / 60.0)))
+        return out
+
+    def validate(self, tail_minutes: float = DEFAULT_TAIL_MINUTES) -> 'DesignerValidation':
+        """Check a curve against what this machine actually does.
+
+        Every rule here corresponds to a mistake that has been made on this
+        roaster, not to a general principle about roasting.
+        """
+        v = DesignerValidation()
+        rows = self.enabled_landmarks()
+        if len(rows) < 2:
+            v.errors.append('a curve needs at least two enabled landmarks')
+            return v
+
+        # enabled_landmarks() sorts by time, so comparing consecutive pairs can
+        # never find a time inversion -- the first version of this check was dead
+        # code. What is actually wrong is a landmark out of its ROAST order: DROP
+        # before DRY_END is a perfectly ascending curve and still nonsense.
+        canonical = {name: i for i, name in enumerate(
+            ('CHARGE', 'DRY_END', 'FC_START', 'FC_END', 'SC_START', 'SC_END', 'DROP'))}
+        known = [(n, t) for n, t, _ in rows if n in canonical]
+        for (n1, _t1), (n2, _t2) in zip(known, known[1:]):
+            if canonical[n2] < canonical[n1]:
+                v.errors.append(f'{n2} is placed after {n1}, but it comes before it in a roast')
+        for (n1, t1, _), (n2, t2, _) in zip(rows, rows[1:]):
+            if t2 == t1:
+                v.errors.append(f'{n1} and {n2} are at the same time')
+
+        rors = self.segment_rors()
+
+        # Rate of rise must decline. A curve that speeds up mid-roast asks the
+        # machine to accelerate a mass that is getting harder to heat.
+        for (n1, n2, r1), (n3, n4, r2) in zip(rors, rors[1:]):
+            if r2 > r1 + 0.05:
+                v.errors.append(
+                    f'rate of rise increases from {r1:.1f} to {r2:.1f} deg/min '
+                    f'({n1}->{n2} then {n3}->{n4}); it must decline through the roast')
+
+        # The ceiling is a warning, not an error: it is a limit of this machine
+        # rather than an impossibility, and a short burst may be intentional.
+        ceiling = ROR_CEILING_F_PER_MIN if self.temp_unit == 'F' else c_delta_to(ROR_CEILING_F_PER_MIN, 'C')
+        for n1, n2, r in rors:
+            if r > ceiling:
+                v.warnings.append(
+                    f'{n1}->{n2} asks for {r:.1f} deg/min; this machine sustains about '
+                    f'{ceiling:.1f}, so it will fall behind the plan')
+
+        cutoff = AUTO_HEAT_CUTOFF_F if self.temp_unit == 'F' else round((AUTO_HEAT_CUTOFF_F - 32) * 5 / 9, 1)
+        peak = max(b for _, _, b in rows)
+        if peak > cutoff:
+            v.warnings.append(
+                f'peak BT {peak:.0f} is above the ~{cutoff:.0f} auto-heat cutoff; the machine '
+                f'has cut its own heat there unprompted, so the curve may be unreachable')
+
+        # The one that is a defect rather than a preference: pidOffDROP means the
+        # burner dies at DROP, and a background that ends at DROP leaves a
+        # Follow-mode PID with no setpoint at all.
+        if tail_minutes <= 0:
+            v.warnings.append(
+                'no tail past DROP: with Follow-background PID the setpoint is undefined '
+                'after the curve ends, so the controller coasts')
+        return v
+
     def load_defaults(self, factory_defaults: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Load saved defaults from settings or return factory defaults"""
         try:
@@ -998,7 +1111,7 @@ class DesignerData:
         with open(filename, 'w') as f:
             json.dump(data, f, indent=2)
     
-    def export_background_alog(self, filename: str) -> None:
+    def export_background_alog(self, filename: str, tail_minutes: float = DEFAULT_TAIL_MINUTES) -> None:
         """Export profile as background roast profile (.alog) - reformatted for background use"""
         try:
             # Generate our temperature curve data
@@ -1008,9 +1121,17 @@ class DesignerData:
             if len(time_curve) == 0 or len(bt_curve) == 0 or len(et_curve) == 0:
                 raise Exception("No temperature curve data to export. Please design a profile first.")
             
+            # Continue the curve past the last landmark. Without this the profile
+            # ends exactly at DROP, and with Follow-background PID that leaves the
+            # setpoint undefined the moment the roast reaches its target -- the
+            # controller coasts. make_roast_curve.py has always tailed for this
+            # reason; the designer never did. See specs/designer-for-agents.html.
+            tail_seconds = max(0.0, float(tail_minutes) * 60.0)
+            end_time = time_curve[-1] + tail_seconds
+
             # Create detailed time and temperature arrays similar to working profile resolution
             num_points = 1800  # Similar to working profile
-            detailed_time = np.linspace(time_curve[0], time_curve[-1], num_points)
+            detailed_time = np.linspace(time_curve[0], end_time, num_points)
             
             # Interpolate to get detailed temperature curves
             from scipy.interpolate import interp1d
@@ -2322,3 +2443,96 @@ def main_standalone():
     window.show()
     
     sys.exit(app.exec())
+
+
+# ---------------------------------------------------------------------------
+# Headless entry point
+# ---------------------------------------------------------------------------
+#
+#   python -m artisanlib.designer --out plan.alog
+#   python -m artisanlib.designer --landmark DROP=24:00@340 --out plan.alog
+#
+# The designer's model is a function of its landmarks, so it can be driven by
+# arguments as well as by clicking. This exists so a curve can be produced,
+# checked and revised by something that is not a person at a window -- which is
+# what background-nudge-as-data needs in order to apply a measured correction
+# back to a plan. See specs/designer-for-agents.html.
+
+
+def _parse_landmark(text: str) -> tuple:
+    """NAME=mm:ss@BT  ->  (name, seconds, bt)."""
+    if '=' not in text:
+        raise ValueError(f'{text!r}: expected NAME=mm:ss@BT')
+    name, rest = text.split('=', 1)
+    name = name.strip().upper()
+    if '@' not in rest:
+        raise ValueError(f'{text!r}: expected NAME=mm:ss@BT')
+    when, temp = rest.split('@', 1)
+    return name, parse_time_strict(when.strip()), float(temp.strip())
+
+
+def main_cli(argv: list | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        prog='python -m artisanlib.designer',
+        description='Generate an Artisan background profile from landmarks, headlessly.')
+    ap.add_argument('--out', required=True, help='path to write (.alog)')
+    ap.add_argument('--landmark', action='append', default=[], metavar='NAME=mm:ss@BT',
+                    help='override or add a landmark; repeatable')
+    ap.add_argument('--disable', action='append', default=[], metavar='NAME',
+                    help='switch a landmark off; repeatable')
+    ap.add_argument('--tail-minutes', type=float, default=DEFAULT_TAIL_MINUTES,
+                    help=f'continue the curve past the last landmark (default {DEFAULT_TAIL_MINUTES:g})')
+    ap.add_argument('--smoothness', type=int, default=None, help='curve smoothness')
+    ap.add_argument('--name', default=None, help='profile name')
+    ap.add_argument('--force', action='store_true', help='export even if validation fails')
+    args = ap.parse_args(argv)
+
+    data = DesignerData()
+    if args.name:
+        data.profile_name = args.name
+    if args.smoothness is not None:
+        data.curviness = args.smoothness
+
+    for spec in args.landmark:
+        try:
+            name, when, bt = _parse_landmark(spec)
+        except ValueError as e:
+            print(f'error: {e}')
+            return 2
+        entry = dict(data.landmarks.get(name, {'enabled': True}))
+        entry['time'] = when
+        entry['BT'] = bt
+        entry.setdefault('ET', round(bt + c_delta_to(-50.0, data.temp_unit), 1))
+        entry['enabled'] = True
+        data.landmarks[name] = entry
+
+    for name in args.disable:
+        key = name.strip().upper()
+        if key in data.landmarks:
+            data.landmarks[key]['enabled'] = False
+
+    print(f'unit: {data.temp_unit}')
+    for n, t, bt in data.enabled_landmarks():
+        print(f'  {n:<9} {int(t)//60}:{int(t)%60:02d}  {bt:.1f}')
+    for n1, n2, r in data.segment_rors():
+        print(f'  RoR {n1}->{n2}: {r:.2f}/min')
+
+    result = data.validate(tail_minutes=args.tail_minutes)
+    print(result)
+    if not result.ok and not args.force:
+        print('not exported. Fix the errors, or pass --force.')
+        return 1
+
+    try:
+        data.export_background_alog(args.out, tail_minutes=args.tail_minutes)
+    except Exception as e:  # pylint: disable=broad-except
+        print(f'export failed: {type(e).__name__}: {e}')
+        return 1
+    print(f'wrote {args.out}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main_cli())
