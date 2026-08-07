@@ -69,4 +69,18 @@ defaults delete org.artisan-scope.Artisan test_group.test_key
 
 `defaults import` merges rather than replaces, so the two junk keys need deleting explicitly. Quit Artisan first — a running instance rewrites settings on exit and will fight the restore.
 
+**Quit every Artisan instance before running the suite — including ArtisanViewer.** Importing `artisanlib.main` runs a single-instance guard at module scope (`main.py:255–259`), and it has two failure modes rather than one:
+
+```python
+if multiprocessing.current_process().name == 'MainProcess' and self.isRunning():
+    self.artisanviewerMode = True                       # ← any running Artisan trips this
+    if platform.system() != 'Windows' and self.isRunningViewer():
+        sys.exit(0)                                     # ← a running Viewer kills the import
+```
+
+- **A running ArtisanViewer** makes the import call `sys.exit(0)`, and pytest reports only `mainloop: caught unexpected SystemExit!` — which names neither Artisan nor the real cause.
+- **A running main Artisan** (no viewer) does *not* exit, but silently sets `artisanviewerMode = True`, so the suite runs against a module that believes it is the viewer. That is the worse case: it passes, and the result means less than it appears to.
+
+Quitting the app is also what makes the serial port available, so it is the same precondition either way.
+
 A parse check is not a test. `python -c "import ast; ast.parse(...)"` on a 3.11 interpreter **fails on untouched upstream files**, because they use PEP 695 `type X = ...` syntax — verified against `canvas.py` on Aug 6, 2026. Check against 3.12+ or don't claim it.

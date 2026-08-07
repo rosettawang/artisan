@@ -25,7 +25,7 @@
 </ul>
 <p><strong>12 new unit tests</strong> (<code>test_kaleido_diagnostics.py</code>), 19 passing with the existing Kaleido suite. They pin the awkward part: <code>termios.error</code> carries <code>(errno, msg)</code> in <code>args</code> and has no <code>.errno</code> attribute, so both shapes must be recognised, as must a pyserial wrapper that only has the text.</p>
 <p><strong>Not verified:</strong> no wedged adapter was available to reproduce EINVAL through Artisan's own connect path — the classifier is unit-tested against constructed exceptions, not a live failure. The next real wedge is the test.</p>
-<p><strong>Incidental finding:</strong> <code>pytest</code> cannot even collect while an ArtisanViewer is running — importing <code>artisanlib.main</code> reaches <code>sys.exit(0)</code> at <code>main.py:258</code> and pytest reports only <em>"mainloop: caught unexpected SystemExit!"</em>. Close every Artisan instance before running the suite.</p>
+<p><strong>Incidental finding:</strong> <code>pytest</code> cannot even collect while an ArtisanViewer is running — importing <code>artisanlib.main</code> reaches <code>sys.exit(0)</code> at <code>main.py:259</code> and pytest reports only <em>"mainloop: caught unexpected SystemExit!"</em>. Close every Artisan instance before running the suite. <strong>Refined Aug 6, 2026:</strong> the guard has two failure modes, and the quieter one is worse — a running <em>Viewer</em> exits the import outright, but a running main Artisan instead sets <code>artisanviewerMode = True</code> and lets the suite run against a module that believes it is the viewer. That one passes, and means less than it looks like. Written up in <code>CLAUDE.md</code>.</p>
 </div>
 
 <div class="callout">

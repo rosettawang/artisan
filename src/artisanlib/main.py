@@ -14300,6 +14300,7 @@ class ApplicationWindow(QMainWindow):
                 # reset the movebackground cache:
                 self.qmc.backgroundprofile_moved_x = 0
                 self.qmc.backgroundprofile_moved_y = 0
+                self.qmc.background_nudges = []
                 # delete background annotation positions
                 self.qmc.deleteAnnoPositions(foreground=False, background=True)
 
@@ -16140,6 +16141,19 @@ class ApplicationWindow(QMainWindow):
                 self.qmc.scheduleDate = decodeLocal(profile['scheduleDate'])
             else:
                 self.qmc.scheduleDate = None
+            # Restored for the record only -- NOT re-applied to the background.
+            # The curve saved in the profile is already in its nudged position, so
+            # re-applying the offset would move it twice.
+            try:
+                self.qmc.backgroundprofile_moved_x = int(profile.get('backgroundprofile_moved_x', 0))
+                self.qmc.backgroundprofile_moved_y = int(profile.get('backgroundprofile_moved_y', 0))
+            except Exception: # pylint: disable=broad-except
+                self.qmc.backgroundprofile_moved_x = 0
+                self.qmc.backgroundprofile_moved_y = 0
+                self.qmc.background_nudges = []
+            nudges = profile.get('background_nudges', [])
+            self.qmc.background_nudges = list(nudges) if isinstance(nudges, list) else []
+
             if 'roastbatchnr' in profile:
                 try:
                     self.qmc.roastbatchnr = int(profile['roastbatchnr'])
@@ -17083,6 +17097,13 @@ class ApplicationWindow(QMainWindow):
             except Exception: # pylint: disable=broad-except
                 pass
             profile['roastbatchnr'] = self.qmc.roastbatchnr
+            # How far the plan had to be moved to match reality, and when. Artisan
+            # accumulates the offset and then discards it on the next background
+            # load, so the correction has to be rediscovered by hand every roast.
+            # See specs/background-nudge-as-data.html.
+            profile['backgroundprofile_moved_x'] = self.qmc.backgroundprofile_moved_x
+            profile['backgroundprofile_moved_y'] = self.qmc.backgroundprofile_moved_y
+            profile['background_nudges'] = self.qmc.background_nudges
             profile['roastbatchprefix'] = encodeLocalStrict(self.qmc.roastbatchprefix)
             profile['roastbatchpos'] = self.qmc.roastbatchpos
             if copy:
@@ -25674,6 +25695,7 @@ class ApplicationWindow(QMainWindow):
         self.qmc.backgroundprofile = None
         self.qmc.backgroundprofile_moved_x = 0
         self.qmc.backgroundprofile_moved_y = 0
+        self.qmc.background_nudges = []
         self.qmc.backgroundpath = ''
         self.qmc.backgroundUUID = None
         self.qmc.titleB = ''
@@ -27869,6 +27891,7 @@ class ApplicationWindow(QMainWindow):
                         self.qmc.backgroundprofile = cast(ProfileData, {})
                         self.qmc.backgroundprofile_moved_x = 0
                         self.qmc.backgroundprofile_moved_y = 0
+                        self.qmc.background_nudges = []
                         if doDraw:
                             self.qmc.redraw(recomputeAllDeltas=recomputeAllDeltas)
                             self.sendmessage(f'B1 = [{EQU[0]}] ; B2 = [{EQU[1]}]')
@@ -28348,6 +28371,7 @@ def main() -> None:
                         appWindow.qmc.backgroundprofile = None
                         appWindow.qmc.backgroundprofile_moved_x = 0
                         appWindow.qmc.backgroundprofile_moved_y = 0
+                        appWindow.qmc.background_nudges = []
                 except Exception as e: # pylint: disable=broad-except
                     _log.exception(e)
                     appWindow.lastLoadedProfile = ''
@@ -28356,6 +28380,7 @@ def main() -> None:
                     appWindow.qmc.backgroundprofile = None
                     appWindow.qmc.backgroundprofile_moved_x = 0
                     appWindow.qmc.backgroundprofile_moved_y = 0
+                    appWindow.qmc.background_nudges = []
             if not appWindow.lastLoadedBackground and not appWindow.lastLoadedProfile:
                 # redraw once to get geometry right
                 appWindow.qmc.redraw(False)

@@ -293,7 +293,7 @@ class tgraphcanvas(QObject):
         'temp1', 'temp2', 'delta1', 'delta2', 'stemp1', 'stemp2', 'tstemp1', 'tstemp2', 'ctimex1', 'ctimex2', 'ctemp1', 'ctemp2', 'unfiltereddelta1', 'unfiltereddelta2',  'unfiltereddelta1_pure', 'unfiltereddelta2_pure',
         'on_timex', 'on_temp1', 'on_temp2', 'on_ctimex1', 'on_ctimex2', 'on_ctemp1', 'on_ctemp2','on_tstemp1', 'on_tstemp2', 'on_unfiltereddelta1',
         'on_unfiltereddelta2', 'on_delta1', 'on_delta2', 'on_extratemp1', 'on_extratemp2', 'on_extratimex', 'on_extractimex1', 'on_extractemp1', 'on_extractimex2', 'on_extractemp2', 'BTprojection_tx', 'BTprojection_temp', 'ETprojection_tx', 'ETprojection_temp', 'DeltaBTprojection_tx', 'DeltaBTprojection_temp', 'DeltaETprojection_tx', 'DeltaETprojection_temp',
-        'timeindex', 'ETfunction', 'BTfunction', 'DeltaETfunction', 'DeltaBTfunction', 'safesaveflag', 'pid', 'background', 'backgroundprofile', 'backgroundprofile_moved_x', 'backgroundprofile_moved_y', 'backgroundDetails',
+        'timeindex', 'ETfunction', 'BTfunction', 'DeltaETfunction', 'DeltaBTfunction', 'safesaveflag', 'pid', 'background', 'backgroundprofile', 'backgroundprofile_moved_x', 'backgroundprofile_moved_y', 'background_nudges', 'backgroundDetails',
         'backgroundeventsflag', 'backgroundpath', 'backgroundUUID', 'backgroundUUID', 'backgroundShowFullflag', 'backgroundKeyboardControlFlag', 'titleB', 'roastbatchnrB', 'roastbatchprefixB',
         'roastbatchposB', 'temp1B', 'temp2B', 'temp1BX', 'temp2BX', 'timeB', 'abs_timeB',
         'stemp1B', 'stemp2B', 'stemp1BX', 'stemp2BX', 'extraname1B', 'extraname2B', 'extratimexB', 'xtcurveidx', 'ytcurveidx', 'delta1B', 'delta2B', 'timeindexB',
@@ -1518,6 +1518,10 @@ class tgraphcanvas(QObject):
         self.background:bool = False # set to True if loaded background profile is shown and False if hidden
         self.backgroundprofile:ProfileData|None = None # if not None, a background profile is loaded
         self.backgroundprofile_moved_x:int = 0 # background profile moved in horizontal direction
+        # One record per nudge: {'t': seconds after CHARGE or None, 'direction', 'step', 'BT'}.
+        # The cumulative offset says the plan was 40s off; this says *when* it drifted, which
+        # is a different fix. See specs/background-nudge-as-data.html.
+        self.background_nudges:list[dict[str,Any]] = []
         self.backgroundprofile_moved_y:int = 0 # background profile moved in vertical direction
         self.backgroundDetails:bool = True
         self.backgroundeventsflag:bool = True
@@ -17259,6 +17263,49 @@ class tgraphcanvas(QObject):
         if self.BTcurve and self.l_temp2 is not None:
             self.l_temp2.set_data(self.timex, self.temp2)
 
+    def recordBackgroundNudge(self, direction:str, step:int) -> None:
+        """Log one background nudge, and warn if it just moved a live setpoint.
+
+        Moving the background is a measurement: it is the roaster saying, in
+        seconds, how wrong the plan was. Artisan already accumulates the total
+        into backgroundprofile_moved_x and then discards it; this keeps *when*
+        each nudge happened, which distinguishes "the plan was 40s optimistic
+        throughout" from "it was fine until DRY END and then drifted".
+
+        The warning exists because with svMode==2 the PID reads its setpoint from
+        the background on every tick, so a left/right nudge changes the
+        temperature the burner is chasing immediately. The spec's call is to warn
+        rather than refuse: it is a legitimate mid-roast tool, and the defect is
+        that it is silent. See specs/background-nudge-as-data.html.
+        """
+        try:
+            t:float|None = None
+            if self.timeindex[0] > -1 and self.timeindex[0] < len(self.timex) and self.timex:
+                t = round(self.timex[-1] - self.timex[self.timeindex[0]], 1)
+            bt:float|None = None
+            if self.temp2 and self.temp2[-1] != -1:
+                bt = round(float(self.temp2[-1]), 1)
+            self.background_nudges.append(
+                {'t': t, 'direction': direction, 'step': int(step), 'BT': bt})
+
+            if direction in {'left', 'right'} and self.pidActiveFollowingBackground():
+                self.aw.sendmessage(QApplication.translate('Message',
+                    'Background moved {0}s while the PID is following it — '
+                    'the setpoint moved with it (total offset {1}s)').format(
+                        step if direction == 'right' else -step,
+                        self.backgroundprofile_moved_x))
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+
+    def pidActiveFollowingBackground(self) -> bool:
+        """True when the PID is on AND taking its setpoint from the background."""
+        try:
+            pidcontrol = getattr(self.aw, 'pidcontrol', None)
+            return bool(pidcontrol is not None and getattr(pidcontrol, 'pidActive', False)
+                        and getattr(pidcontrol, 'svMode', 0) == 2)
+        except Exception: # pylint: disable=broad-except
+            return False
+
     def movebackground(self, direction:str, step:int) -> None:
         lt = len(self.timeB)
         le = len(self.temp1B)
@@ -17313,6 +17360,8 @@ class tgraphcanvas(QObject):
                         self.stemp2BX[i][j] -= float(step)
                 self.backgroundprofile_moved_y -= step
                 self.moveBackgroundAnnoPositionsY(-step)
+
+            self.recordBackgroundNudge(direction, step)
 
             # ensure to deactivate passed background events to prevent their replay
             if self.backgroundPlaybackEvents and direction in {'left','right'}:
