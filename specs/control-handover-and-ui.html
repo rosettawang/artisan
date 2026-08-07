@@ -6,7 +6,6 @@
   <title>Loading a plan is not consenting to be driven by it</title>
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/pid_control.py src/artisanlib/pid_dialogs.py src/artisanlib/main.py" />
-  <meta name="spec-decision" content="Turn pidOnCHARGE off? Recommended YES, and it is the whole fix for the accidental handover — it is the single flag that converts 'a plan is loaded' into 'the burner is being driven'. Everything else stays inert until the PID is on. Artisan's own code default is False; only this install sets it True. Settings-only, reversible, no code. Does not block, but nothing else here matters until it is answered." />
   <meta name="spec-decision" content="Drop UI_mode from EXPERT to DEFAULT? Recommended yes, DEFAULT (2) rather than PRODUCTION (3). PRODUCTION hides the whole Tools menu, and the Designer lives there. Settings-only, instantly reversible, no code. Does not block." />
   <link rel="stylesheet" href="spec.css" />
 </head>
@@ -34,6 +33,21 @@
 <p>This does <em>not</em> reopen the CHARGE-handover decision. That one is about the burner starting to drive itself when a roast begins; this one is about a file configuring the controller. Both are instances of the same principle — a reference action must not quietly become a control action — but the owner's answer here narrows that principle rather than abandoning it: <strong>quietly is the problem, not applying.</strong></p>
 </div>
 
+<div class="callout">
+<h4>Decided by the owner, Aug 6, 2026 — <strong>leave <code>pidOnCHARGE</code> ON</strong> and announce it. This spec recommended turning it off.</h4>
+<p>Owner: <em>"leave pidOnCHARGE ON, and add the announcement."</em></p>
+<p><strong>The "elegant fix is one flag" section below is superseded</strong> — kept rather than deleted, because its reasoning is still the reasoning, and only its conclusion changed. What it got wrong was an assumption it never stated: that an automatic handover is unwanted. For a roastery whose normal case is a guided roast with the PID following the background, the automation is the point. Turning it off would trade a surprise for an extra button press before every single roast.</p>
+<p><strong>What was actually wrong is the silence.</strong> The complaint was that control switched <em>accidentally</em> — and re-read with the owner's later statement that they are "not usually running unguided roasts", the accident is that nothing said so, minutes after a file was opened and forgotten. Not that it happened.</p>
+<p>So the fix is one line of feedback, not a settings change:</p>
+<ul>
+  <li><strong>Keep <code>pidOnCHARGE = True</code>.</strong> No change to how a roast runs.</li>
+  <li><strong>Announce the handover when it fires</strong> — a message-line note at CHARGE naming what took over and what it is following, e.g. <em>"PID on — following background"</em>. After the fact, not a prompt; a prompt at CHARGE would be worse than the silence.</li>
+  <li><strong>Same code change as the background-load announcement above.</strong> Both are "say what you just did", in two places, and they should land together so the wording matches.</li>
+</ul>
+<p><strong>This narrows the principle rather than abandoning it.</strong> A reference action must not <em>quietly</em> become a control action — quietly is the operative word, and both of the owner's answers point the same way: applying is correct here, applying in silence is not.</p>
+<p><em>The one thing that would reopen this:</em> charging beans without wanting the burner driven — a warm-up, a test, a manual batch. If that ever becomes routine, off is safer, because a flag that is right most of the time is worse than an explicit press.</p>
+</div>
+
 <h2>What actually happens, in order</h2>
 
 <p>Derived Aug 6, 2026 from this install's settings and the 4.2.1 source. Re-derive the settings half with:</p>
@@ -57,7 +71,8 @@
 
 <p>Everything below follows from that one line. A background profile is a <em>reference</em> — the shape you are trying to hit. Wanting to see it is not the same as wanting a controller to chase it, and the UI currently offers no way to say one without eventually getting the other.</p>
 
-<h2>The elegant fix is one flag</h2>
+<h2><del>The elegant fix is one flag</del> — superseded Aug 6, 2026</h2>
+<p class="meta">Kept for its reasoning, which still holds. The conclusion is reversed: see the decision above.</p>
 
 <p>It is tempting to redesign the whole PID dialog. It is not necessary. <strong>Of the four settings, exactly one converts a loaded plan into a moving burner: <code>pidOnCHARGE</code>.</strong></p>
 
