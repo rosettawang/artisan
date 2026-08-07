@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
+<div class="internal">Internal planning dashboard — <b>fork-only, never part of an upstream PR</b></div>
+<div class="wrap">
 
 <p><a href="index.html">← Specs index</a></p>
 
@@ -176,5 +178,6 @@
 
 <p>This is a fork of an active upstream (433 commits arrived between Nov 2025 and Aug 2026). Every file touched is a future merge conflict, so: put everything possible in <strong>one new file</strong> (<code>mcp_server.py</code>), and keep the <code>main.py</code> delta to a menu action plus start/stop calls. Do not refactor upstream code to make the MCP prettier. An upstream PR is unlikely to be accepted — an LLM control surface on a burner is not a general-audience feature — so assume this lives downstream forever and optimise for cheap rebases.</p>
 
+</div>
 </body>
 </html>

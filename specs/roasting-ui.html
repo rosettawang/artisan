@@ -10,12 +10,31 @@
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
+<div class="internal">Internal planning dashboard — <b>fork-only, never part of an upstream PR</b></div>
+<div class="wrap">
 
 <p><a href="index.html">← Specs index</a></p>
 
 <h1>A roasting UI with only the buttons this roast needs</h1>
 
 <p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. This is mostly a configuration job with one small piece of code, not a new UI.</p>
+
+<div class="callout">
+<h4>Step 1 built, Aug 6, 2026 — <code>minimal-roasting.apal</code></h4>
+<p>Palette 3, eight buttons, six visible — down from palette 1's forty-two. Delivered as an importable <code>.apal</code> rather than written into the preferences, because Artisan was running and rewrites its settings on quit; a plist edit would have been silently discarded.</p>
+<table>
+  <tr><th>Button</th><th>Command</th><th>Why</th></tr>
+  <tr><td><em>(hidden)</em></td><td><code>button(9,0)</code></td><td>Marked <strong>KEEP!</strong> in palette 1. Invisible, triggered programmatically — carried into every palette or something stops working.</td></tr>
+  <tr><td><em>(hidden)</em></td><td><code>kaleido(EV,8)</code></td><td>Also <strong>KEEP!</strong>. Event 8 is DROP.</td></tr>
+  <tr><td>++ / −−</td><td><code>kaleido(HP,UP/DW)</code></td><td>Burner fine-adjust, copied verbatim from palette 1 including colours.</td></tr>
+  <tr><td>++ / −−</td><td><code>kaleido(FC,UP/DW)</code></td><td>Air fine-adjust, likewise.</td></tr>
+  <tr><td>◀ bg / bg ▶</td><td><code>moveBackground(left,50)</code> / <code>(right,50)</code></td><td>New. Artisan Command (action 19, <code>main.py:10830</code>); step 50 matches this install's <code>movespeed</code>.</td></tr>
+</table>
+<p><strong>Drum has no buttons, deliberately.</strong> Palette 1's drum controls are <code>kaleido(RC,{})</code> value-buttons; there is no <code>RC,UP</code>/<code>RC,DW</code> anywhere in it. Inventing one would have been an unverified protocol guess, and the drum slider is already configured (<code>kaleido(RC,{})</code>, slider 1). Sliders for all three actuators are inherited from palette 1 unchanged.</p>
+<p><strong>Validated, 12 checks:</strong> palettes 1 and 2 byte-identical to the live settings, the seven other slots still empty, 28 fields, all nine per-button lists the same length, within slot 3's <code>maxlen</code> of 14, sliders inherited, both KEEP! buttons present, Kaleido buttons on IO Command (6) and the nudge on Artisan Command (19). That last pair is also a cross-check on the action indexing: 6 matching palette 1's existing Kaleido buttons is what confirms 19 is right for Artisan Command.</p>
+<p><strong>Not verified:</strong> it has never been imported. Nothing here has been through Artisan's own <code>loadPalettes</code>, no button has been pressed, and <code>moveBackground</code> as a <em>button</em> action is untested — the command exists and is dispatched at <code>main.py:10830</code>, but this install has only ever reached it by keyboard. Import it and press the two bg buttons on a cold machine before trusting them mid-roast.</p>
+<p><strong>To load:</strong> Artisan ▸ Config ▸ Events ▸ Buttons ▸ Load, and choose <code>minimal-roasting.apal</code>. It carries all ten slots, so palettes 1 and 2 come back exactly as they are now — importing cannot lose them.</p>
+</div>
 
 <h2>Most of this already exists</h2>
 
@@ -103,5 +122,6 @@
   <li><strong>Not established:</strong> whether the 42-button grid is genuinely unused or used for speed in a way the sliders cannot match. This spec assumes the sliders suffice; that assumption is the owner's to overturn, and it is the substance of the open decision.</li>
 </ul>
 
+</div>
 </body>
 </html>
