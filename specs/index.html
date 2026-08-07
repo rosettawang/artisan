@@ -80,7 +80,7 @@
     <a href="heat-cutoff-override.html">Who cuts the heat at 165 °C, and can software override it</a>
     <span class="tag tag-open">open</span>
     <p>Every roast on this machine dies in a 14 °F band. Artisan's four automatic DROP paths are ruled out by measurement, and one roast proves the machine cuts its own heat unprompted — but nobody has yet watched the wire at the moment it happens, and that single recording decides whether this is fixable in software or is a machine limit to design around.</p>
-    <p class="blocker"><strong>Remaining:</strong> Aug 7, 2026 — Phase 1 (frame logging) needs nobody. Phases 2 and 3 need the owner at the roaster, and Phase 3 requires the first-ever write to this machine, which kaleido-machine-adaptations gates behind a fan/drum command on a cold empty drum.</p>
+    <p class="blocker"><strong>Remaining:</strong> Aug 7, 2026 — PHASE 1 IS BUILT. Wire capture now writes every frame to ~/.artisan-mcp/frames.jsonl tagged artisan/bridge/machine, 23 new tests, 125 passing across four suites, and roast_status reports frame_capture so it can be confirmed before charging. What remains needs the roaster: run ONE roast through the bridge to the cut (Artisan -&gt; Config &gt; Device &gt; Kaleido, WiFi 127.0.0.1:8765) and read the frames around AH going to 0. That answers the whole question with no writes. Phases 2 and 3 need the owner at the roaster; Phase 3 needs the first-ever write, gated by kaleido-machine-adaptations behind a fan/drum command on a cold empty drum.</p>
   </li>
 </ul>
 

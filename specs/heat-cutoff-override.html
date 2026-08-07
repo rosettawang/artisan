@@ -7,7 +7,7 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="artisan-mcp/artisan_mcp/roaster.py artisan-mcp/artisan_mcp/bridge.py artisan-mcp/artisan_mcp/daemon.py artisan-mcp/artisan_mcp/mcp_server.py" />
   <meta name="spec-needs" content="kaleido-machine-adaptations" />
-  <meta name="spec-blocker" content="Aug 7, 2026 — Phase 1 (frame logging) needs nobody. Phases 2 and 3 need the owner at the roaster, and Phase 3 requires the first-ever write to this machine, which kaleido-machine-adaptations gates behind a fan/drum command on a cold empty drum." />
+  <meta name="spec-blocker" content="Aug 7, 2026 — PHASE 1 IS BUILT. Wire capture now writes every frame to ~/.artisan-mcp/frames.jsonl tagged artisan/bridge/machine, 23 new tests, 125 passing across four suites, and roast_status reports frame_capture so it can be confirmed before charging. What remains needs the roaster: run ONE roast through the bridge to the cut (Artisan -> Config > Device > Kaleido, WiFi 127.0.0.1:8765) and read the frames around AH going to 0. That answers the whole question with no writes. Phases 2 and 3 need the owner at the roaster; Phase 3 needs the first-ever write, gated by kaleido-machine-adaptations behind a fan/drum command on a cold empty drum." />
   <meta name="spec-decision" content="Authorise writes to the physical roaster for this investigation? Recommended yes, staged: fan on a cold empty drum first (discharging the guardrail in kaleido-machine-adaptations), then AH on a cold drum, and only then AH mid-roast with the owner watching. Blocks Phase 3 only; Phase 1 and 2 answer most of the question without any write." />
   <meta name="spec-decision" content="If the cut proves machine-issued and non-overridable, retarget the roast to 335 °F and stop pursuing 350? Recommended yes — 32 completed roasts cluster at a 328 °F median and the owner's own tasting notes call 335 golden and 339 burnt, so 335 is both the reliable ceiling and the preferred result. Does not block; it is what to do with the answer." />
   <meta name="spec-verify" content="python3 -c &quot;import json,sys; f=[json.loads(l) for l in open('/Users/rosettawang/.artisan-mcp/frames.jsonl')]; ah=[r for r in f if 'AH' in r.get('frame','')]; sys.exit(0 if any(r['dir']=='machine' for r in ah) else 1)&quot;" />
@@ -22,6 +22,20 @@
 <h1>Who cuts the heat at 165 °C, and can software override it</h1>
 
 <p class="lede">Every roast on this machine dies in a 14 °F band. Artisan's four automatic DROP paths are ruled out by measurement, and one roast proves the machine cuts its own heat unprompted — but nobody has yet watched the wire at the moment it happens, and that single recording decides whether this is fixable in software or is a machine limit to design around.</p>
+
+<div class="callout">
+<h4>Phase 1 built, Aug 7, 2026 — the wire is now recorded</h4>
+<p><code>artisan_mcp/framelog.py</code>: every request and response appended to <code>~/.artisan-mcp/frames.jsonl</code>, one JSON object per line, with a wall clock, a monotonic offset, a direction and — the point of the exercise — a <strong>source</strong>.</p>
+<pre><code>{"t":1786…,"mono":12.34,"dir":"out","source":"artisan","frame":"{[RD A0]}"}
+{"t":1786…,"mono":12.36,"dir":"in", "source":"machine","frame":"{0,BT:210.5,AH:1}"}
+{"t":1786…,"mono":98.10,"dir":"out","source":"bridge", "frame":"{[AH 0]}"}
+</code></pre>
+<p><code>source</code> is what makes the capture answer the question rather than merely describe it: a relayed request is tagged <code>artisan</code>, an injected one <code>bridge</code>, a response <code>machine</code>. <strong>An <code>{[AH 0]}</code> that Artisan sent can never be confused with one the bridge sent</strong>, and a bare <code>AH:0</code> in a response with no preceding write is unambiguous.</p>
+<p><strong>23 new tests, 125 passing across four suites.</strong> The one that matters is driven through a PTY with a fake machine: an Artisan poll and an injected <code>{[AH 0]}</code> in the same capture, checked to be distinguishable by source. Capture failures are counted and swallowed, never raised — verified by pointing the log at a directory so every write fails; a full disk must not interrupt a roast.</p>
+<p><code>roast_status</code> now reports <code>frame_capture</code> (path, enabled, frames written, failures, size) so it can be confirmed recording <em>before</em> charging, rather than discovering afterwards that the one roast that mattered was not captured. <code>--no-frame-log</code> disables it.</p>
+<p><strong>Also fixed a gap this exposed:</strong> <code>~/Documents/artisan-mcp</code> had no version control at all — 1,700 lines including <code>safety.py</code>, which holds the interlocks. Now a git repository with the work committed.</p>
+<p><strong>What is left is one roast.</strong> Point Artisan at the bridge (Config ▸ Device ▸ Kaleido, WiFi <code>127.0.0.1:8765</code>), roast to the cut, and read the frames around the <code>AH</code> transition. No writes, nothing armed.</p>
+</div>
 
 <div class="callout">
 <h4>The one thing that would settle it</h4>
