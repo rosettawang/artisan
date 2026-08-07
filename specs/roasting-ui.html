@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A roasting UI with only the buttons this roast needs</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/main.py" />
+  <meta name="spec-decision" content="Which buttons belong in the minimal set? Recommended: START/STOP, CHARGE, DROP, the three sliders (Burner/Air/Drum), and background nudge left/right — derived from what this session watched being used, not from a survey. Does not block: the palette can be built, tried on one roast, and edited. This is the only part that needs the owner, because it is about how they roast." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>A roasting UI with only the buttons this roast needs</h1>
+
+<p class="lede">Asked for as "a simplified UI more tailored to just the buttons I need, that can be dropped". Almost all of the machinery already exists and is already configured on this install — there are ten switchable button palettes, eight of them empty. This is mostly a configuration job with one small piece of code, not a new UI.</p>
+
+<h2>Most of this already exists</h2>
+
+<p>Before specifying anything, three mechanisms were checked against this install's own settings (<code>defaults export org.artisan-scope.Artisan</code>, Aug 6, 2026):</p>
+
+<table>
+  <tr><th>Mechanism</th><th>State here</th><th>What it gives you</th></tr>
+  <tr>
+    <td><strong>Button palettes</strong><br /><code>ExtraEventButtons.buttonpalette</code></td>
+    <td><strong>10 slots. Palette 1 holds 42 buttons, palette 2 holds 16, the other eight are empty.</strong></td>
+    <td>A complete, switchable set of custom buttons. Palette 1 is the wall of <em>100% Burner … OFF Burner / Air / Drum</em> currently on screen. Switching palettes swaps the whole button area at once — which <em>is</em> "a simplified UI that can be dropped in".</td>
+  </tr>
+  <tr>
+    <td><strong>Default-button visibility</strong><br /><code>DefaultButtons.buttonvisibility</code></td>
+    <td><code>[True × 8]</code> — every one shown.</td>
+    <td>Per-button show/hide for CHARGE, DRY END, FCs, FCe, SCs, SCe, DROP, COOL. SCs and SCe are marked in only 10 and 8 of 46 recorded roasts; they are taking permanent space for an occasional job.</td>
+  </tr>
+  <tr>
+    <td><strong>UI modes</strong><br /><code>UI_mode</code>, <code>UI_MODE</code> at <code>main.py:1353</code></td>
+    <td>EXPERT (1), DEFAULT (2), PRODUCTION (3).</td>
+    <td>Coarse: PRODUCTION hides the whole Tools menu, and the Designer lives there. Already an open decision in <a href="control-handover-and-ui.html">control-handover-and-ui</a>, recommending DEFAULT.</td>
+  </tr>
+</table>
+
+<p><strong>So the honest scope is:</strong> build one palette, hide two or three default buttons, and add the one thing genuinely missing — a way to switch palettes without going through a config dialog. Everything else is already there and unused.</p>
+
+<h2>The one thing that is actually missing</h2>
+
+<p>Palettes can be defined, but switching between them is buried. For "simplified" to mean anything during a roast, the switch has to be reachable <em>without</em> opening a dialog — otherwise the tailored set is one more thing to set up rather than a thing that drops in.</p>
+
+<p><strong>Proposed:</strong> a palette selector on the main window, next to the button area, showing the palette label (this install's is currently <code>all</code>). One combo box or a pair of arrows. It is the only code in this spec, and it touches <code>main.py</code> only.</p>
+
+<h2>What the minimal set should contain</h2>
+
+<p>Derived from what this session actually watched being used and from the 46 recorded roasts, rather than from a survey:</p>
+
+<pre><code>┌────────────────────────────────────────────────────────┐
+│  OFF      START            CHARGE      DROP            │   ← run the roast
+├────────────────────────────────────────────────────────┤
+│  Burner  ▁▂▃▄▅▆▇   Air  ▁▂▃▄▅▆▇   Drum  ▁▂▃▄▅▆▇        │   ← the three sliders
+├────────────────────────────────────────────────────────┤
+│  ◀ background          offset −40s          background ▶│   ← the nudge, with its number
+└────────────────────────────────────────────────────────┘
+</code></pre>
+
+<p>Three notes on that sketch, each with a reason:</p>
+<ul>
+  <li><strong>Sliders, not the 42-button grid.</strong> Palette 1 spends 42 buttons on discrete percentages (100%, 90%, 80% …) for three actuators that already have continuous sliders on the left of the window. The grid is faster for a known value and worse for everything else; the sliders are already there and already work.</li>
+  <li><strong>DRY END, FCs, FCe stay available but off the minimal set.</strong> They are marked in 14, 13 and 10 of 46 roasts — real but not every-roast. Hiding them is reversible per-button.</li>
+  <li><strong>The background nudge earns its place</strong>, because <a href="background-nudge-as-data.html">this install nudges routinely</a> — <code>movespeed</code> is set to 50 against a default of 30. Showing the accumulated offset next to the control is new, and is where the nudge stops being invisible.</li>
+</ul>
+
+<h2>The unhappy states</h2>
+
+<p>Where the design is actually decided, per the house rule that a mockup must include them:</p>
+
+<pre><code>┌────────────────────────────────────────────────────────┐
+│  OFF      START            CHARGE      DROP            │
+│                            ▲ not connected — no readings│
+└────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────┐
+│  OFF      START            CHARGE      DROP            │
+│  ▲ PID is following the background; the burner is being │
+│    driven from the plan                                 │
+└────────────────────────────────────────────────────────┘
+</code></pre>
+
+<p>The second one is the point of contact with <a href="control-handover-and-ui.html">control-handover-and-ui</a>: a simplified UI must not simplify away <em>the fact that something else is driving the burner</em>. Fewer buttons is only an improvement if the state that matters stays visible. If the two specs disagree, that one wins — it is about heat and this one is about convenience.</p>
+
+<h2>Order, and what it depends on</h2>
+
+<ol>
+  <li><strong>Build the palette in an empty slot (3–9).</strong> Pure configuration, zero code, instantly reversible — palette 1 is untouched and one switch away. Try it on one roast before anything else is built.</li>
+  <li><strong>Hide the default buttons that are not earning their space.</strong> Also configuration, per-button, reversible.</li>
+  <li><strong>Add the palette selector to the main window.</strong> The only code. Worth doing only if step 1 survives a roast.</li>
+  <li><strong>Show the background offset next to the nudge.</strong> Needs <a href="background-nudge-as-data.html">background-nudge-as-data</a>, whose persistence and per-nudge record shipped Aug 6, 2026.</li>
+</ol>
+
+<h2>What was verified, and what was not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026</strong> against this install's settings: ten palette slots with 42 and 16 buttons in slots 1 and 2 and eight empty; all eight default buttons visible; the <code>UI_MODE</code> enum and its three values; <code>movespeed = 50</code>; and the landmark-marking frequencies (CHARGE and DROP in 46 of 46 roasts, DRY END 14, FCs 13, FCe 10, SCs 10, SCe 8).</li>
+  <li><strong>Not verified:</strong> that switching palettes mid-roast is safe. It rebuilds the button area while a roast is recording, and nothing here has tested that. Check it on a beanless run before trusting it during a roast.</li>
+  <li><strong>Not established:</strong> whether the 42-button grid is genuinely unused or used for speed in a way the sliders cannot match. This spec assumes the sliders suffice; that assumption is the owner's to overturn, and it is the substance of the open decision.</li>
+</ul>
+
+</body>
+</html>

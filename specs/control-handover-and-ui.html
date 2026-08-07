@@ -7,7 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/pid_control.py src/artisanlib/pid_dialogs.py src/artisanlib/main.py" />
   <meta name="spec-decision" content="Turn pidOnCHARGE off? Recommended YES, and it is the whole fix for the accidental handover — it is the single flag that converts 'a plan is loaded' into 'the burner is being driven'. Everything else stays inert until the PID is on. Artisan's own code default is False; only this install sets it True. Settings-only, reversible, no code. Does not block, but nothing else here matters until it is answered." />
-  <meta name="spec-decision" content="On background load, should the background's settings be APPLIED or merely AVAILABLE? Recommended: available. Replace the four hidden always-on flags (loadpidfrombackground, loadRampSoakFromBackground, loadalarmsfrombackground, phasesfromBackgroundflag) with one explicit 'Apply background settings' action the operator presses. A file should not silently rewrite the controller's tuning. BLOCKS the code work below — the flags stay as they are until this is answered." />
   <meta name="spec-decision" content="Drop UI_mode from EXPERT to DEFAULT? Recommended yes, DEFAULT (2) rather than PRODUCTION (3). PRODUCTION hides the whole Tools menu, and the Designer lives there. Settings-only, instantly reversible, no code. Does not block." />
   <link rel="stylesheet" href="spec.css" />
 </head>
@@ -16,6 +15,20 @@
 <h1>Loading a plan is not consenting to be driven by it</h1>
 
 <p class="lede">The burner handover is not a bug — it is three separately reasonable settings composing into an automatic one. Each was designed on its own; nothing in the UI shows they add up. This is the design principle that fixes it, the one-flag version of the fix, and the built-in answer to simplifying the UI.</p>
+
+<div class="callout">
+<h4>Decided by the owner, Aug 6, 2026 — <strong>APPLIED</strong> by default. This spec recommended the opposite.</h4>
+<p>Owner: <em>"I say On background load should be APPLIED by default. I am not usually running unguided roasts."</em></p>
+<p><strong>The recommendation above is superseded, and the reasoning behind it was incomplete.</strong> It argued that "a file should not silently rewrite the controller's tuning" — reasonable in the abstract, and wrong for this roastery. A background here is not a reference sketch; it is the plan the roast is actually driven from, with the PID following it (<code>svMode = 2</code>). Making its settings opt-in would mean pressing an extra button before every normal roast, which is the wrong default for someone whose normal case is a guided roast.</p>
+<p><strong>Precise scope of the reversal.</strong> What is withdrawn is "replace the four always-on flags with an explicit action". What survives — and what the finding was really about — is that the applying is <em>invisible</em>: <code>loadpidfrombackground</code>, <code>loadRampSoakFromBackground</code>, <code>loadalarmsfrombackground</code> and <code>phasesfromBackgroundflag</code> are on, hidden, and rewrite the controller with no statement that they did. Applying is correct here. <strong>Applying in silence is not.</strong></p>
+<p>So the code work becomes:</p>
+<ul>
+  <li><strong>Keep applying on load, by default.</strong> No change to what happens for a normal roast.</li>
+  <li><strong>Say what was applied.</strong> When a background load changes PID tuning, ramp/soak, alarms or phases, name it on the message line. One line, after the fact, not a prompt.</li>
+  <li><strong>Make it a visible setting that defaults to on</strong>, rather than four hidden flags — "by default" implies something that can be turned off, and the four flags already exist to be surfaced.</li>
+</ul>
+<p>This does <em>not</em> reopen the CHARGE-handover decision. That one is about the burner starting to drive itself when a roast begins; this one is about a file configuring the controller. Both are instances of the same principle — a reference action must not quietly become a control action — but the owner's answer here narrows that principle rather than abandoning it: <strong>quietly is the problem, not applying.</strong></p>
+</div>
 
 <h2>What actually happens, in order</h2>
 
