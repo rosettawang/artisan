@@ -824,6 +824,15 @@ def c_to(value: float, unit: str) -> float:
     return round(value * 9.0 / 5.0 + 32.0, 1) if unit == 'F' else value
 
 
+def f_to(value: float, unit: str) -> float:
+    """Convert a Fahrenheit constant to `unit`. Identity when unit is 'F'.
+
+    Used for the factory landmarks, which are measured values and are therefore
+    written in the unit they were measured in rather than translated by hand.
+    """
+    return value if unit == 'F' else round((value - 32.0) * 5.0 / 9.0, 1)
+
+
 def c_delta_to(delta: float, unit: str) -> float:
     """Convert a Celsius *difference* to `unit` -- no +32, it is an interval."""
     return round(delta * 9.0 / 5.0, 1) if unit == 'F' else delta
@@ -835,16 +844,37 @@ class DesignerData:
     def __init__(self):
         self.temp_unit = designer_temp_unit()
         u = self.temp_unit
-        # Factory defaults are written in Celsius and converted, so they keep
-        # meaning the same roast rather than becoming nonsense numbers in F.
+        # Factory defaults are this roastery's own measured medians, not coffee
+        # textbook numbers. Derived Aug 6, 2026 from the 46 recorded .alog roasts
+        # that have both CHARGE and DROP marked, all logged in Fahrenheit:
+        #
+        #   landmark    n    time    BT
+        #   CHARGE     46    0:00    180 F      (drum at charge, not bean)
+        #   DRY_END    14    5:04    200 F
+        #   FC_START   13    9:31    230 F
+        #   FC_END     10   11:14    243 F
+        #   SC_START   10   12:29    282 F
+        #   SC_END      8   14:23    300 F
+        #   DROP       46   22:01    331 F
+        #
+        # The previous defaults were coffee in Celsius (CHARGE 80, DROP 210) and
+        # described a 11-minute roast; these describe the 22-minute bay-nut roast
+        # actually done here. Written in Fahrenheit because that is the unit they
+        # were measured in; f_to() converts if Artisan is set to Celsius.
+        #
+        # ET is derived from BT by the offset rather than measured. The measured ET
+        # medians are non-monotonic (163, 391, 439, 443, 436, 429, 235) because ET
+        # swings with the environment probe -- unusable as a designed curve, and
+        # independent evidence for why Bean Temperature Only Mode exists.
+        et = lambda bt: round(bt + c_delta_to(-50.0, u), 1)  # noqa: E731
         factory_defaults = {
-            'CHARGE': {'time': 0, 'BT': c_to(80.0, u), 'ET': c_to(70.0, u), 'enabled': True},
-            'DRY_END': {'time': 240, 'BT': c_to(150.0, u), 'ET': c_to(110.0, u), 'enabled': True},  # 4:00
-            'FC_START': {'time': 420, 'BT': c_to(190.0, u), 'ET': c_to(140.0, u), 'enabled': True},  # 7:00
-            'FC_END': {'time': 480, 'BT': c_to(205.0, u), 'ET': c_to(155.0, u), 'enabled': True},   # 8:00
-            'SC_START': {'time': 540, 'BT': c_to(220.0, u), 'ET': c_to(170.0, u), 'enabled': False}, # 9:00
-            'SC_END': {'time': 600, 'BT': c_to(235.0, u), 'ET': c_to(180.0, u), 'enabled': False},  # 10:00
-            'DROP': {'time': 660, 'BT': c_to(210.0, u), 'ET': c_to(165.0, u), 'enabled': True}      # 11:00
+            'CHARGE':   {'time': 0,    'BT': f_to(180.0, u), 'ET': et(f_to(180.0, u)), 'enabled': True},
+            'DRY_END':  {'time': 300,  'BT': f_to(200.0, u), 'ET': et(f_to(200.0, u)), 'enabled': True},   # 5:00
+            'FC_START': {'time': 570,  'BT': f_to(230.0, u), 'ET': et(f_to(230.0, u)), 'enabled': True},   # 9:30
+            'FC_END':   {'time': 675,  'BT': f_to(243.0, u), 'ET': et(f_to(243.0, u)), 'enabled': True},   # 11:15
+            'SC_START': {'time': 750,  'BT': f_to(282.0, u), 'ET': et(f_to(282.0, u)), 'enabled': False},  # 12:30
+            'SC_END':   {'time': 870,  'BT': f_to(300.0, u), 'ET': et(f_to(300.0, u)), 'enabled': False},  # 14:30
+            'DROP':     {'time': 1320, 'BT': f_to(331.0, u), 'ET': et(f_to(331.0, u)), 'enabled': True}    # 22:00
         }
 
         # Load saved defaults or use factory defaults.
@@ -1257,6 +1287,33 @@ def stringtoseconds_standalone(time_str: str) -> float:
             return float(time_str)
     except:
         return 0.0
+
+
+def parse_time_strict(time_str: str) -> float:
+    """mm:ss (or bare seconds) to seconds, raising on anything malformed.
+
+    stringtoseconds_standalone() returns 0.0 for unparseable input, which is fine
+    for its callers but useless for validation: "banana" silently became 0:00 and
+    the operator was then told the landmark was out of order, which is true but
+    not the actual problem. This is the strict variant Apply uses so it can name
+    the real fault.
+    """
+    text = time_str.strip()
+    if not text:
+        raise ValueError('empty')
+    if ':' in text:
+        parts = text.split(':')
+        if len(parts) != 2:
+            raise ValueError('expected mm:ss')
+        minutes, seconds = parts[0].strip(), parts[1].strip()
+        if not minutes.isdigit() or not seconds.isdigit():
+            raise ValueError('expected mm:ss with whole numbers')
+        if int(seconds) > 59:
+            raise ValueError('seconds must be 0-59')
+        return float(minutes) * 60 + float(seconds)
+    if not text.isdigit():
+        raise ValueError('expected mm:ss')
+    return float(text)
 
 
 class ProfileCanvas(FigureCanvas):
@@ -1803,59 +1860,89 @@ class StandaloneDesignerWindow(QMainWindow):
         self.canvas.update_plot()
         
     def apply_landmark_changes(self):
-        """Apply all landmark changes from input fields and update plot"""
+        """Apply all landmark changes, or apply none and say exactly what is wrong.
+
+        Rewritten Aug 6, 2026. The old version parsed each field in its own
+        `try/except: pass`, so a malformed entry was silently dropped and the field
+        kept its previous value with no message -- which is what "clicking apply
+        reverts the curve" actually was. It also had no ordering check at all, so
+        landmarks could be committed out of sequence and produce a nonsense curve.
+
+        Now: parse everything into a staging copy, validate, and commit only if the
+        whole set is good. A refusal names the offending field or the offending
+        pair. See specs/designer-window.html (notes 1.1, 1.3, 1.4).
+        """
         try:
-            # Handle landmark name changes first
+            problems: list[str] = []
+            staged: dict = {}
+
+            for name, widgets in self.landmark_widgets.items():
+                current = self.data.landmarks.get(name, {})
+                entry = dict(current)
+
+                time_str = widgets['time'].text().strip()
+                if time_str:
+                    try:
+                        entry['time'] = parse_time_strict(time_str)
+                    except ValueError as te:
+                        problems.append(f'{name}: time "{time_str}" is not mm:ss ({te})')
+
+                for key, label in (('bt', 'BT'), ('et', 'ET')):
+                    raw = widgets[key].text().strip()
+                    if not raw:
+                        continue
+                    try:
+                        entry[label] = float(raw)
+                    except ValueError:
+                        problems.append(f'{name}: {label} "{raw}" is not a number')
+
+                staged[name] = entry
+
+            # Times must strictly ascend across the landmarks that are switched on.
+            # Only enabled ones: a disabled SC_START should not block a valid DROP.
+            enabled = [(n, e['time']) for n, e in staged.items()
+                       if e.get('enabled', True) and 'time' in e]
+            enabled.sort(key=lambda pair: list(staged).index(pair[0]))
+            for (n1, t1), (n2, t2) in zip(enabled, enabled[1:]):
+                if t2 <= t1:
+                    problems.append(
+                        f'{n2} ({stringfromseconds_standalone(t2)}) must come after '
+                        f'{n1} ({stringfromseconds_standalone(t1)})')
+
+            if problems:
+                # Nothing is committed -- the fields keep what you typed so it can
+                # be corrected, rather than being reverted underneath you.
+                QMessageBox.warning(
+                    self, 'Changes not applied',
+                    'Nothing was changed. Fix these and press Apply again:\n\n  • '
+                    + '\n  • '.join(problems))
+                return
+
+            # Renames, once the numbers are known good. CHARGE and DROP are fixed.
+            landmarks_to_rename = []
             if hasattr(self, 'landmark_name_widgets'):
-                landmarks_to_rename = []
                 for old_name, name_widget in self.landmark_name_widgets.items():
                     new_name = name_widget.text().strip()
-                    if new_name and new_name != old_name and old_name not in ['CHARGE', 'DROP']:
+                    if new_name and new_name != old_name and old_name not in ('CHARGE', 'DROP'):
                         landmarks_to_rename.append((old_name, new_name))
-                
-                # Apply renames
-                for old_name, new_name in landmarks_to_rename:
-                    if new_name not in self.data.landmarks:  # Avoid conflicts
-                        self.data.landmarks[new_name] = self.data.landmarks.pop(old_name)
-                        # Update widget references
-                        if old_name in self.landmark_widgets:
-                            self.landmark_widgets[new_name] = self.landmark_widgets.pop(old_name)
-            
-            # Read all values from input fields and update data
-            for name, widgets in self.landmark_widgets.items():
-                # Update time
-                time_str = widgets['time'].text()
-                try:
-                    time_seconds = stringtoseconds_standalone(time_str)
-                    self.data.landmarks[name]['time'] = time_seconds
-                except:
-                    pass
-                
-                # Update BT
-                bt_str = widgets['bt'].text()
-                try:
-                    bt_temp = float(bt_str)
-                    self.data.landmarks[name]['BT'] = bt_temp
-                except:
-                    pass
-                
-                # Update ET
-                et_str = widgets['et'].text()
-                try:
-                    et_temp = float(et_str)
-                    self.data.landmarks[name]['ET'] = et_temp
-                except:
-                    pass
-            
-            # If names changed, refresh the entire UI to update references
-            if hasattr(self, 'landmark_name_widgets') and landmarks_to_rename:
+
+            for name, entry in staged.items():
+                self.data.landmarks[name] = entry
+
+            for old_name, new_name in landmarks_to_rename:
+                if new_name not in self.data.landmarks:  # avoid collisions
+                    self.data.landmarks[new_name] = self.data.landmarks.pop(old_name)
+                    if old_name in self.landmark_widgets:
+                        self.landmark_widgets[new_name] = self.landmark_widgets.pop(old_name)
+
+            if landmarks_to_rename:
                 self.refresh_ui()
             else:
-                # Just update plot if no renames
                 self.canvas.update_plot()
-        except Exception as e:
-            print(f"Error applying landmark changes: {e}")
-    
+        except Exception as e:  # pylint: disable=broad-except
+            QMessageBox.critical(self, 'Changes not applied',
+                                 f'Could not apply the changes: {type(e).__name__}: {e}')
+
     def save_as_default(self):
         """Save current landmark values as default for future sessions"""
         try:

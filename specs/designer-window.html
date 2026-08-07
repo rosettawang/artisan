@@ -7,7 +7,6 @@
   <meta name="spec-status" content="open" />
   <meta name="spec-touches" content="src/artisanlib/designer.py src/artisanlib/canvas.py" />
   <meta name="spec-needs" content="kaleido-machine-adaptations" />
-  <meta name="spec-decision" content="Replace the designer's default landmarks with the owner's bay-nut numbers? Recommended yes. Today's defaults are coffee in Celsius (CHARGE 80, DRY_END 150, FC_START 190, DROP 210) and the owner roasts bay nuts in Fahrenheit with cracks at 217-218 and 228-231. Every new profile currently starts by being wrong twice — wrong product, wrong unit. Does not block." />
   <link rel="stylesheet" href="spec.css" />
 </head>
 <body>
@@ -15,6 +14,37 @@
 <h1>The Designer notes, triaged — a third of them are already built</h1>
 
 <p class="lede">Twelve Designer complaints, a PID request and a hardware question, written against a 2025 Artisan and handed over on Aug 6, 2026. Checked one by one against the merged 4.2.1 tree: four are already shipped, one was built and deleted the same day, two have a single shared root cause, and one cannot be specified because its screenshots are missing.</p>
+
+<div class="callout">
+<h4>Shipped Aug 6, 2026 — the defaults, and the silent revert</h4>
+<p>Both in the standalone window, as this spec decided. Its first task (teaching it <code>qmc.mode</code>) landed with <a href="kaleido-machine-adaptations.html">Finding 5</a>.</p>
+
+<p><strong>The landmark decision is answered with measurement, not preference.</strong> Parsed the 74 recorded <code>.alog</code> roasts; 46 have both CHARGE and DROP marked, all logged in Fahrenheit. The medians are now the factory defaults:</p>
+<table>
+  <tr><th>Landmark</th><th>n</th><th>time</th><th>BT</th></tr>
+  <tr><td>CHARGE</td><td>46</td><td>0:00</td><td>180 °F</td></tr>
+  <tr><td>DRY_END</td><td>14</td><td>5:00</td><td>200 °F</td></tr>
+  <tr><td>FC_START</td><td>13</td><td>9:30</td><td>230 °F</td></tr>
+  <tr><td>FC_END</td><td>10</td><td>11:15</td><td>243 °F</td></tr>
+  <tr><td>SC_START</td><td>10</td><td>12:30</td><td>282 °F</td></tr>
+  <tr><td>SC_END</td><td>8</td><td>14:30</td><td>300 °F</td></tr>
+  <tr><td>DROP</td><td>46</td><td>22:00</td><td>331 °F</td></tr>
+</table>
+<p>The old defaults described an 11-minute coffee roast in Celsius. These describe the 22-minute bay-nut roast actually done here, and 331 °F at DROP squares with the roast log's 341–362 °F end temps. They are written in Fahrenheit — the unit they were measured in — and converted by <code>f_to()</code> if Artisan is set to Celsius.</p>
+<p><strong>ET is derived from BT by the offset, not measured.</strong> The measured ET medians are non-monotonic — 163, 391, 439, 443, 436, 429, 235 — because the environment probe swings. Unusable as a designed curve, and independent evidence for why Bean Temperature Only Mode exists.</p>
+
+<p><strong>Notes 1.1 / 1.3 / 1.4 — the silent revert — are fixed in this window, and it was a <em>different</em> bug from the one diagnosed below.</strong> The in-app designer's version is the COOL-at-17:00 ordering trap. The standalone window has no COOL and no ordering check at all; instead <code>apply_landmark_changes</code> parsed every field inside its own bare <code>except: pass</code>, so a bad entry was dropped in silence and the field kept its old value. That is what "clicking apply reverts the curve" was here. It also meant landmarks could be committed out of sequence.</p>
+<p>Now: parse into a staging copy, validate the whole set, commit all or nothing, and name the fault. Verified by driving the method with <code>QMessageBox</code> stubbed:</p>
+<pre><code>DROP before FC_END   refused, nothing committed  -> DROP (5:00) must come after FC_END (11:15)
+time "banana"        refused, nothing committed  -> DRY_END: time "banana" is not mm:ss
+time "9:75"          refused, nothing committed  -> FC_START: time "9:75" ... (seconds must be 0-59)
+BT "abc"             refused, nothing committed  -> FC_START: BT "abc" is not a number
+DROP 25:00           applied
+</code></pre>
+<p><strong>A bug in the first version of this fix, found by running it:</strong> the message for an unparseable time said the landmark was out of order. <code>stringtoseconds_standalone()</code> returns <code>0.0</code> for garbage rather than raising, so "banana" silently became 0:00 and only the ordering check noticed — true, but not the fault. Added <code>parse_time_strict()</code> for validation and left the lenient parser's contract alone, since other callers depend on it.</p>
+<p><strong>25 new tests.</strong> The defaults are pinned on properties — ascending times, monotonic BT, ET one offset below BT, same roast in either unit — rather than the exact figures, so re-deriving them from new roasts does not break the suite.</p>
+<p><strong>Not verified:</strong> nothing here has been exercised through the actual UI by a human; the validation was driven programmatically with the dialog stubbed out.</p>
+</div>
 
 <h2>Read this before fixing anything: there are two designers</h2>
 

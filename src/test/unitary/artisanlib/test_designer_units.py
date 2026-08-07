@@ -96,3 +96,46 @@ def test_unit_defaults_to_celsius_when_settings_raise(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr('artisanlib.designer.QSettings', boom)
     assert designer_temp_unit() == 'C'
+
+
+# -- strict time parsing ---------------------------------------------------
+#
+# stringtoseconds_standalone() returns 0.0 for unparseable input. That is fine
+# for its callers but useless for validation: "banana" became 0:00 and the
+# operator was told the landmark was out of order -- true, but not the fault.
+
+
+@pytest.mark.parametrize(('text', 'seconds'), [
+    ('0:00', 0.0),
+    ('5:00', 300.0),
+    ('22:00', 1320.0),
+    ('9:30', 570.0),
+    ('12', 12.0),        # bare number is seconds
+    ('5: 30', 330.0),    # tolerate stray space
+])
+def test_strict_parse_accepts(text: str, seconds: float) -> None:
+    from artisanlib.designer import parse_time_strict
+    assert parse_time_strict(text) == seconds
+
+
+@pytest.mark.parametrize('text', [
+    'banana', '', '   ', '1:2:3', '-1:00', '5:99', '1.5:00', 'mm:ss',
+])
+def test_strict_parse_rejects(text: str) -> None:
+    from artisanlib.designer import parse_time_strict
+    with pytest.raises(ValueError):
+        parse_time_strict(text)
+
+
+def test_strict_parse_differs_from_the_lenient_one() -> None:
+    """The lenient parser silently returns 0.0, which is what hid the real fault."""
+    from artisanlib.designer import parse_time_strict, stringtoseconds_standalone
+    assert stringtoseconds_standalone('banana') == 0.0
+    with pytest.raises(ValueError):
+        parse_time_strict('banana')
+
+
+def test_a_25_minute_drop_parses() -> None:
+    """The original complaint: anything past ~18 minutes appeared to revert."""
+    from artisanlib.designer import parse_time_strict
+    assert parse_time_strict('25:00') == 1500.0

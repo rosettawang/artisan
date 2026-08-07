@@ -77,7 +77,7 @@
   <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
   <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0">after control-handover-and-ui · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
   <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
-  <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
+  <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0">after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
 </ol>
 <div class="callout warn">
 <h4>Conflicts to resolve first</h4>
@@ -94,7 +94,7 @@
 <h2 id="decisions">Decisions waiting on the owner</h2>
 <p>Choices only the owner can make — answer in any Claude session (in chat, or edit the spec's <code>spec-decision</code> meta). A session records the answer in the owning spec and the next prune drops it from here. It never silently picks a default and buries it in a commit.</p>
 <!-- GENERATED:DECISIONS:START -->
-<p class="meta">5 decisions across 3 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
+<p class="meta">4 decisions across 2 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
 <ul class="spec-decision-list">
   <li>
     <a href="control-handover-and-ui.html">Loading a plan is not consenting to be driven by it</a>
@@ -102,12 +102,6 @@
       <li>Turn pidOnCHARGE off? Recommended YES, and it is the whole fix for the accidental handover — it is the single flag that converts 'a plan is loaded' into 'the burner is being driven'. Everything else stays inert until the PID is on. Artisan's own code default is False; only this install sets it True. Settings-only, reversible, no code. Does not block, but nothing else here matters until it is answered.</li>
       <li>On background load, should the background's settings be APPLIED or merely AVAILABLE? Recommended: available. Replace the four hidden always-on flags (loadpidfrombackground, loadRampSoakFromBackground, loadalarmsfrombackground, phasesfromBackgroundflag) with one explicit 'Apply background settings' action the operator presses. A file should not silently rewrite the controller's tuning. BLOCKS the code work below — the flags stay as they are until this is answered.</li>
       <li>Drop UI_mode from EXPERT to DEFAULT? Recommended yes, DEFAULT (2) rather than PRODUCTION (3). PRODUCTION hides the whole Tools menu, and the Designer lives there. Settings-only, instantly reversible, no code. Does not block.</li>
-    </ul>
-  </li>
-  <li>
-    <a href="designer-window.html">The Designer notes, triaged — a third of them are already built</a>
-    <ul>
-      <li>Replace the designer's default landmarks with the owner's bay-nut numbers? Recommended yes. Today's defaults are coffee in Celsius (CHARGE 80, DRY_END 150, FC_START 190, DROP 210) and the owner roasts bay nuts in Fahrenheit with cracks at 217-218 and 228-231. Every new profile currently starts by being wrong twice — wrong product, wrong unit. Does not block.</li>
     </ul>
   </li>
   <li>
