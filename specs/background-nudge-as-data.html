@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nudging the background is a measurement, and Artisan throws it away</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/canvas.py src/artisanlib/main.py" />
+  <meta name="spec-needs" content="control-handover-and-ui" />
+  <meta name="spec-decision" content="Persist backgroundprofile_moved_x/y into the saved profile and the roast record? Recommended YES — it is the single most informative number about how wrong the plan was, it already exists in memory, and it is currently reset to 0 in five places and never written to disk. Cheap: one field in save/load. Does not block." />
+  <meta name="spec-decision" content="Warn or refuse when the background is nudged while the PID is following it? Recommended WARN, not refuse. With svMode=2 and PID on, dragging the reference curve moves the setpoint the burner is chasing, live and silently -- but mid-roast re-alignment is a legitimate thing to want, and refusing it would take away a real tool. A message-line note naming the new offset is enough. Does not block." />
+  <meta name="spec-decision" content="Should align-on-event replace manual nudging for the CHARGE case? Recommended: offer it, do not force it. Artisan already has timealign()/alignEvent (canvas.py:5938) which anchors the background to the foreground on CHARGE/DRY/FCs/DROP. That is the principled version of a left/right nudge and it is exact. But it cannot express 'the whole plan was optimistic', which is what a mid-roast nudge often means. Does not block." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>Nudging the background is a measurement, and Artisan throws it away</h1>
+
+<p class="lede">You move the background left or right when the roast stops matching the plan. That act is the most honest measurement in the whole session — it is the roaster saying, in seconds, exactly how wrong the plan was. Artisan tracks the number in memory, resets it to zero in five different places, and never writes it to disk.</p>
+
+<h2>Why you move it</h2>
+
+<p>A background profile is a plan drawn before the roast. Reality diverges from it for reasons that are mostly not the plan's fault — the charge went in late, the drum was hotter or colder than last time, the ambient changed, the batch mass differed. When that happens the curve on screen stops being a useful reference: it is the right <em>shape</em> in the wrong <em>place</em>.</p>
+
+<p>Sliding it left or right puts the shape back over reality so it can go on being a reference. <strong>The moment you reach for that control is the moment you noticed the plan was wrong</strong> — and how far you drag it is the size of the error, in seconds.</p>
+
+<h2>What it actually does</h2>
+
+<p><code>movebackground(direction, step)</code> (<code>canvas.py:17262</code>) does not adjust a view offset. It <strong>mutates the background data</strong>: for left/right it walks <code>timeB</code> and adds or subtracts <code>step</code> from every point, then accumulates the total into <code>backgroundprofile_moved_x</code>. Up/down does the same to <code>temp1B</code>/<code>temp2B</code> and <code>backgroundprofile_moved_y</code>.</p>
+
+<p>This install moves in bigger jumps than stock: <code>background.movespeed = 50</code> against a default of 30 (<code>canvas.py:1526</code>) — consistent with someone who uses this control routinely rather than occasionally.</p>
+
+<h2>Finding 1 — while the PID follows, this is a live control input</h2>
+
+<div class="callout warn">
+<p>With <code>svMode = 2</code> ("Follow background") and the PID on, the setpoint is read from the background <strong>on every sampling tick</strong>:</p>
+<pre><code>res = self.aw.qmc.backgroundSmoothedBTat(tx + self.svLookahead)   # pid_control.py</code></pre>
+<p>It samples <code>timeB</code> live. So dragging the background left or right <strong>changes the temperature the burner is chasing, immediately</strong>. There is no confirmation, no annotation, and nothing in the UI that distinguishes this from adjusting a view.</p>
+<p>This is the same failure shape as <a href="control-handover-and-ui.html">the CHARGE handover</a>: an action that reads as "looking at things" is wired to an action that drives heat. It belongs to the same principle — <em>a reference action must never quietly become a control action</em> — and it is the second instance found, which suggests looking for a third rather than treating either as a one-off.</p>
+</div>
+
+<h2>Finding 2 — the number exists, and is deliberately discarded</h2>
+
+<p><code>backgroundprofile_moved_x</code> holds the cumulative shift. It is:</p>
+
+<ul>
+  <li><strong>tracked</strong> — incremented and decremented on every move (<code>canvas.py:17289</code>, <code>:17298</code>)</li>
+  <li><strong>used to undo itself</strong> — <code>canvas.py:8331</code> moves the background back by the accumulated amount</li>
+  <li><strong>reset to zero in five places</strong> — <code>main.py:14301</code> (on background load), <code>:25675</code>, <code>:27870</code>, <code>:28349</code>, <code>:28357</code></li>
+  <li><strong>never written to a profile, a log, or anything else.</strong> It does not appear in save or load.</li>
+</ul>
+
+<p>So the workflow today is: notice the plan is wrong → measure exactly how wrong by dragging until it fits → and then lose that measurement the next time a background is loaded. The next roast starts from the same unadjusted plan, and the correction has to be rediscovered by hand, mid-roast, again.</p>
+
+<p><strong>This is the whole point of the spec.</strong> The fix is not new machinery — the number is already computed. It needs to survive.</p>
+
+<h2>What Artisan already offers, and where it falls short</h2>
+
+<table>
+  <tr><th>Mechanism</th><th>What it does</th><th>Why it is not enough</th></tr>
+  <tr><td><code>timealign()</code> / <code>alignEvent</code><br /><code>canvas.py:5938</code>, <code>:1339</code></td><td>Anchors the background to the foreground on a chosen event — CHARGE, DRY, FCs, FCe, SCs, SCe, DROP or ALL.</td><td>Exact and principled, and it is the right answer when the problem is "the charge was late". It cannot express "the whole plan was optimistic", which is what a mid-roast nudge usually means, and it only helps once the anchoring event has actually happened.</td></tr>
+  <tr><td><code>svLookahead</code></td><td>The PID targets the background value at <code>tx + svLookahead</code> — it aims ahead of the curve.</td><td>This is a permanent bias, set in a dialog before the roast. It is the designed knob for "chase slightly ahead", not for "today is running 40 seconds behind".</td></tr>
+</table>
+
+<p>Worth saying plainly: <strong>if the usual reason for nudging is a late or early charge, <code>alignEvent = 0</code> (CHARGE) already solves it exactly and automatically.</strong> Try that before building anything. The nudge-as-data work below is for the residual case where the shape itself needs revising.</p>
+
+<h2>The proposal</h2>
+
+<ol>
+  <li><strong>Persist the offset.</strong> Write <code>backgroundprofile_moved_x</code> and <code>_moved_y</code> into the saved profile, and stop resetting them silently. One field each in save/load.</li>
+  <li><strong>Timestamp the nudge, don't just total it.</strong> A single cumulative number says the plan was 40 s off. A record of <em>when</em> each nudge happened says the plan was fine to DRY END and then drifted — which is a different fix. Record (roast time, direction, step, BT at that moment) per nudge.</li>
+  <li><strong>Surface it after the roast, not during.</strong> Mid-roast the operator is busy; the useful moment is when designing the next profile. "Your last three roasts each needed +35 s after first crack" is a profile revision, stated in the only units that matter.</li>
+  <li><strong>Feed it back into the designer.</strong> This is where it pays off: the nudge history is the input for revising the curve, rather than redrawing from memory. Connects directly to <a href="designer-window.html">designer-window</a> and to the roast-design workflow.</li>
+</ol>
+
+<p>Steps 1 and 2 are small and independent. Steps 3 and 4 are the reason to bother.</p>
+
+<h2>What was verified, and what was not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026</strong> against <code>fb2703f89</code>: <code>movebackground</code> mutating <code>timeB</code> and accumulating into <code>backgroundprofile_moved_x</code>; the five reset sites; the absence of any save/load of that field; the live <code>backgroundSmoothedBTat(tx + svLookahead)</code> read in the <code>svMode == 2</code> branch; <code>timealign</code>/<code>alignEvent</code> and its event list; and <code>background.movespeed = 50</code> in this install against a default of 30.</li>
+  <li><strong>Not verified:</strong> that nudging while the PID is following visibly moves the burner. This is read from code, not observed. <em>It is also the one claim here that should not be tested during a real roast</em> — check it cold, with a background loaded, PID on and the heater at zero, and watch whether the SV readout tracks the drag.</li>
+  <li><strong>Assumed:</strong> that the reported problem — "that's when I saw a problem and needed to change the profile" — refers to time-shifting rather than the up/down temperature shift. The up/down case has the same structure and the same discarded number (<code>_moved_y</code>), so the proposal covers both, but the emphasis here follows the report.</li>
+  <li><strong>Not investigated:</strong> whether any of the owner's 31 logged roasts would have produced a useful offset history, since none was ever recorded. The first roast after step 1 ships is the first data point.</li>
+</ul>
+
+</body>
+</html>
