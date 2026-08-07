@@ -17,6 +17,19 @@
 
 <p class="lede">Seven findings. Four are protocol facts measured against the real machine on Aug 6, 2026 rather than read out of the driver; three came from merging 433 upstream commits and finding that the fork had drifted — including a Kaleido RoR bug upstream fixed twice while this fork sat still.</p>
 
+<div class="callout">
+<h4>Shipped Aug 6, 2026 — Findings 2, 3 and 4</h4>
+<p>The three items that needed neither the owner at the roaster nor a contended file are built. All in <code>kaleido.py</code> and <code>devices.py</code>; nothing here touches <code>designer.py</code>, <code>main.py</code> or <code>pid_dialogs.py</code>.</p>
+<ul>
+  <li><strong>Finding 4 — the CP210x wedge.</strong> New <code>diagnose_serial_error()</code> in <code>kaleido.py</code> turns an opaque failure into a remediation line, and <code>serial_connect</code> logs it once per cause rather than on every retry of its forever-reconnect loop. EINVAL now says <em>unplug the cable</em> and explicitly says it is <em>not</em> a baud rate or port setting — which is where the generic message sent us for an hour. Also covers ENOENT (no such port), EBUSY (another process owns it) and EACCES.</li>
+  <li><strong>Finding 3 — the <code>connected (None)</code> log.</strong> Both transports now log <em>"no serial number reported"</em> when the machine omits <code>SN</code>. The serial path did not log <code>SN</code> at all; it now matches the WebSocket path.</li>
+  <li><strong>Finding 2 — the event flags.</strong> The checkbox tooltip in <code>devices.py</code> now says the flag only works if the machine reports events in the low 4 bits of its status word, and that many machines do not.</li>
+</ul>
+<p><strong>12 new unit tests</strong> (<code>test_kaleido_diagnostics.py</code>), 19 passing with the existing Kaleido suite. They pin the awkward part: <code>termios.error</code> carries <code>(errno, msg)</code> in <code>args</code> and has no <code>.errno</code> attribute, so both shapes must be recognised, as must a pyserial wrapper that only has the text.</p>
+<p><strong>Not verified:</strong> no wedged adapter was available to reproduce EINVAL through Artisan's own connect path — the classifier is unit-tested against constructed exceptions, not a live failure. The next real wedge is the test.</p>
+<p><strong>Incidental finding:</strong> <code>pytest</code> cannot even collect while an ArtisanViewer is running — importing <code>artisanlib.main</code> reaches <code>sys.exit(0)</code> at <code>main.py:258</code> and pytest reports only <em>"mainloop: caught unexpected SystemExit!"</em>. Close every Artisan instance before running the suite.</p>
+</div>
+
 <h2>The measurement</h2>
 
 <p>Taken with Artisan closed, holding <code>/dev/cu.usbserial-0001</code> directly at 57600 baud. Re-derive with <code>~/Documents/artisan-mcp/doctor</code>, or by hand:</p>
