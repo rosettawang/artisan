@@ -41,6 +41,11 @@
     <p>A working MCP bridge already exists outside Artisan and was verified against the real roaster on Aug 6, 2026. This spec is not "build an MCP" — it is "move it inside, and delete the parts that exist only to work around being outside."</p>
   </li>
   <li>
+    <a href="crack-listener.html">Listening for cracks, and using the machine's own state to know what to ignore</a>
+    <span class="tag tag-open">open</span>
+    <p>Record the roast, separate crack transients from drum and fan noise, and turn crack density into a number that can inform the drying phase. Artisan has no audio input of any kind today, so all of this is new. Low priority — filed to be ready, not to be built next.</p>
+  </li>
+  <li>
     <a href="control-handover-and-ui.html">Loading a plan is not consenting to be driven by it</a>
     <span class="tag tag-open">open</span>
     <p>The burner handover is not a bug — it is three separately reasonable settings composing into an automatic one. Each was designed on its own; nothing in the UI shows they add up. This is the design principle that fixes it, the one-flag version of the fix, and the built-in answer to simplifying the UI.</p>
@@ -70,15 +75,17 @@
   <li><a href="control-handover-and-ui.html">control-handover-and-ui</a> — Loading a plan is not consenting to be driven by it<br /><span class="meta" style="margin:0"><strong>3 decisions waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code>, <code>src/artisanlib/pid_dialogs.py</code></span></li>
   <li><a href="kaleido-machine-adaptations.html">kaleido-machine-adaptations</a> — What this Kaleido actually reports, and where the fork drifted from it<br /><span class="meta" style="margin:0"><strong>3 decisions waiting on the owner</strong> · shares <code>src/artisanlib/pid_dialogs.py</code>, <code>src/artisanlib/designer.py</code></span></li>
   <li><a href="background-nudge-as-data.html">background-nudge-as-data</a> — Nudging the background is a measurement, and Artisan throws it away<br /><span class="meta" style="margin:0"><strong>3 decisions waiting on the owner</strong> · after control-handover-and-ui · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></span></li>
+  <li><a href="crack-listener.html">crack-listener</a> — Listening for cracks, and using the machine's own state to know what to ignore<br /><span class="meta" style="margin:0"><strong>2 decisions waiting on the owner</strong> · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
   <li><a href="designer-window.html">designer-window</a> — The Designer notes, triaged — a third of them are already built<br /><span class="meta" style="margin:0"><strong>3 decisions waiting on the owner</strong> · after kaleido-machine-adaptations · shares <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/designer.py</code></span></li>
-  <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · after control-handover-and-ui · shares <code>src/artisanlib/main.py</code></span></li>
+  <li><a href="mcp-server.html">mcp-server</a> — An MCP server inside Artisan, and the four things being outside it costs<br /><span class="meta" style="margin:0"><strong>1 decision waiting on the owner</strong> · after control-handover-and-ui · shares <code>src/artisanlib/main.py</code>, <code>src/requirements.txt</code></span></li>
 </ol>
 <div class="callout warn">
 <h4>Conflicts to resolve first</h4>
 <ul>
   <li>src/artisanlib/canvas.py is edited by 2 specs (background-nudge-as-data, designer-window). Sequence them; never work them in parallel sessions.</li>
-  <li>src/artisanlib/main.py is edited by 3 specs (background-nudge-as-data, control-handover-and-ui, mcp-server). Sequence them; never work them in parallel sessions.</li>
+  <li>src/artisanlib/main.py is edited by 4 specs (background-nudge-as-data, control-handover-and-ui, crack-listener, mcp-server). Sequence them; never work them in parallel sessions.</li>
   <li>src/artisanlib/pid_dialogs.py is edited by 2 specs (control-handover-and-ui, kaleido-machine-adaptations). Sequence them; never work them in parallel sessions.</li>
+  <li>src/requirements.txt is edited by 2 specs (crack-listener, mcp-server). Sequence them; never work them in parallel sessions.</li>
   <li>src/artisanlib/designer.py is edited by 2 specs (designer-window, kaleido-machine-adaptations). Sequence them; never work them in parallel sessions.</li>
 </ul>
 </div>
@@ -87,12 +94,19 @@
 <h2 id="decisions">Decisions waiting on the owner</h2>
 <p>Choices only the owner can make — answer in any Claude session (in chat, or edit the spec's <code>spec-decision</code> meta). A session records the answer in the owning spec and the next prune drops it from here. It never silently picks a default and buries it in a commit.</p>
 <!-- GENERATED:DECISIONS:START -->
-<p class="meta">13 decisions across 5 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
+<p class="meta">15 decisions across 6 specs, generated from each spec's <code>spec-decision</code> meta. Answer one and it disappears from here on the next prune.</p>
 <ul class="spec-decision-list">
   <li>
     <a href="mcp-server.html">An MCP server inside Artisan, and the four things being outside it costs</a>
     <ul>
       <li>Transport: streamable-http on 127.0.0.1, not SSE. SSE is the deprecated MCP transport and Artisan would carry it forever. Does not block — recommended default, build it unless overruled.</li>
+    </ul>
+  </li>
+  <li>
+    <a href="crack-listener.html">Listening for cracks, and using the machine's own state to know what to ignore</a>
+    <ul>
+      <li>Is 'more crackling means too much moisture, so extend drying' an established fact or a working hypothesis? Recommended: treat it as the owner's hypothesis and build Phase A/B to TEST it, not to act on it. The roast log already carries humidity for 15 roasts (10.1-12.7%) but no crack measurement, which is exactly the missing variable. Nothing should auto-extend drying until the correlation is shown on this machine, with this product. Does not block — it shapes what Phase D is allowed to do.</li>
+      <li>Microphone: built-in Mac mic, or a dedicated mic near the drum? Recommended a cheap USB mic clamped near the drum head. The Mac's mic is metres away, aimed at the room, and gain-controlled by macOS — AGC alone will defeat onset detection by pumping the noise floor. Blocks Phase A: the calibration recordings should be made with whatever mic will be used for real.</li>
     </ul>
   </li>
   <li>
@@ -199,6 +213,7 @@
   <li><strong>Nothing is proven against a <em>moving</em> roast.</strong> Updated Aug 6, 2026: the merge itself is now proven — 2359 tests pass with zero regressions, the app and the standalone designer both run from source. What remains unproven is behaviour under heat. Every temperature claim was measured on a machine at room temperature, and the interlocks have never refused a real command during a real roast. Prefer the phases that reach a watched, beanless heated run over the phases that add tools.</li>
   <li><del><strong>The fork's diffs contain edits nobody intended.</strong> <code>designer.py</code> and <code>main.py</code> have not been audited the same way.</del> <strong>✓ Audited Aug 6, 2026 — clean.</strong> <code>designer.py</code> is a strict superset of upstream's (zero upstream lines lost, verified by <code>git diff upstream/master -- src/artisanlib/designer.py | grep "^-"</code> returning nothing). <code>main.py</code>'s fork delta is coherent, and the merge restored <code>designerAction</code> to <code>__slots__</code> alongside the fork's two additions, with all 3 <code>setEnabled</code> call sites matching upstream. <code>canvas.py</code> and <code>pid_dialogs.py</code> are byte-identical to upstream. <strong>The collateral damage was confined to <code>pid_dialogs.py</code> and is fixed.</strong></li>
   <li><strong>A running bridge owns the roaster.</strong> Learned the hard way (hardware-pass row 2): one process holds the serial port, and if it is not Artisan then Artisan is blind. Never leave the bridge running across a change of topic, and never while anyone might roast.</li>
+  <li><strong>Lowest priority, by the owner's own call: <a href="crack-listener.html">crack-listener</a>.</strong> Filed to be ready, not to be built next. It also has the cheapest kill test in the whole folder — record one roast on a phone near the drum and listen back. If a human cannot hear cracks over the fan, close the spec. Do that before it is ever scheduled.</li>
   <li><strong>Rebase cost compounds.</strong> The longer this fork sits behind upstream, the more each spec's <code>spec-touches</code> hurts — and the 433-commit gap meant roasting on a knowingly-broken Kaleido RoR for months. Pull upstream before starting a phase, not after.</li>
 </ul>
 

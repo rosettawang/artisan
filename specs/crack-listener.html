@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Listening for cracks, and using the machine's own state to know what to ignore</title>
+  <meta name="spec-status" content="open" />
+  <meta name="spec-touches" content="src/artisanlib/crack_listener.py src/artisanlib/main.py src/requirements.txt" />
+  <meta name="spec-decision" content="Is 'more crackling means too much moisture, so extend drying' an established fact or a working hypothesis? Recommended: treat it as the owner's hypothesis and build Phase A/B to TEST it, not to act on it. The roast log already carries humidity for 15 roasts (10.1-12.7%) but no crack measurement, which is exactly the missing variable. Nothing should auto-extend drying until the correlation is shown on this machine, with this product. Does not block — it shapes what Phase D is allowed to do." />
+  <meta name="spec-decision" content="Microphone: built-in Mac mic, or a dedicated mic near the drum? Recommended a cheap USB mic clamped near the drum head. The Mac's mic is metres away, aimed at the room, and gain-controlled by macOS — AGC alone will defeat onset detection by pumping the noise floor. Blocks Phase A: the calibration recordings should be made with whatever mic will be used for real." />
+  <link rel="stylesheet" href="spec.css" />
+</head>
+<body>
+
+<h1>Listening for cracks, and using the machine's own state to know what to ignore</h1>
+
+<p class="lede">Record the roast, separate crack transients from drum and fan noise, and turn crack density into a number that can inform the drying phase. Artisan has no audio input of any kind today, so all of this is new. <strong>Low priority — filed to be ready, not to be built next.</strong></p>
+
+<h2>The idea worth keeping</h2>
+
+<p>Most crack detectors are given a microphone and nothing else, so they spend their effort guessing what the machine sounds like. <strong>Artisan already knows.</strong> Heater, fan and drum percentages arrive on every sampling tick, straight from the Kaleido (<code>HP</code>, <code>FC</code>, <code>RC</code>).</p>
+
+<p>So the noise model can be <em>conditioned on machine state</em>: fan at 60% has a known signature, and when the fan changes the expected noise changes with it — predictably, and a tick before the audio does. That converts the hard problem (blind source separation in a noisy room) into a much easier one (is this transient louder than what the fan at 60% and drum at 40% should sound like?).</p>
+
+<p>This is the part of the design that is actually novel and the reason to build it here rather than use a generic tool.</p>
+
+<h2>Why cracks are separable at all</h2>
+
+<table>
+  <tr><th></th><th>Machine noise</th><th>A crack</th></tr>
+  <tr><td>Duration</td><td>Continuous</td><td>Impulsive — milliseconds</td></tr>
+  <tr><td>Spectrum</td><td>Narrow, tonal, stable (fan blade rate, drum rumble)</td><td>Broadband click</td></tr>
+  <tr><td>Over time</td><td>Stationary until an actuator changes</td><td>Sparse events, clustering into a rate</td></tr>
+</table>
+
+<p>That difference is what onset detection exploits: track the spectral flux, subtract a running estimate of the stationary floor, and call the peaks. <strong>No machine learning is needed for a first version</strong>, and starting without it keeps the thing debuggable — a threshold you can see is worth more than a model you cannot.</p>
+
+<h2>Proposed UI</h2>
+
+<p>Two additions. A strip under the roast curve, and a small panel. Both live; neither steals space when the feature is off.</p>
+
+<h3>Listening, with the noise floor known</h3>
+
+<div style="background:#141416;border:1px solid #3a3a3c;border-radius:10px;padding:14px 16px;margin:12px 0;font-family:-apple-system,Segoe UI,sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+    <strong style="color:#e8e8ea;font-size:.95rem">Crack listener</strong>
+    <span style="color:#7ec97e;font-size:.78rem">● listening · noise floor learned (fan 60 · drum 40)</span>
+  </div>
+
+  <svg viewBox="0 0 620 108" style="width:100%;height:auto;display:block">
+    <rect x="42" y="6" width="150" height="70" fill="#2a3550" opacity=".55"/>
+    <text x="46" y="20" fill="#8fa8d8" font-size="9" font-family="sans-serif">DRYING</text>
+    <text x="196" y="20" fill="#8a8a8e" font-size="9" font-family="sans-serif">MAILLARD</text>
+
+    <line x1="42" y1="76" x2="612" y2="76" stroke="#4a4a4e" stroke-width="1"/>
+    <text x="4" y="46" fill="#8a8a8e" font-size="9" font-family="sans-serif">cracks</text>
+    <text x="4" y="58" fill="#8a8a8e" font-size="9" font-family="sans-serif">/min</text>
+
+    <polyline points="42,74 120,73 190,72 240,68 280,52 320,30 360,22 400,26 440,40 470,55 500,66 530,71"
+              fill="none" stroke="#e8804a" stroke-width="2"/>
+
+    <g stroke="#e8804a" stroke-width="1.4" opacity=".85">
+      <line x1="252" y1="70" x2="252" y2="76"/><line x1="266" y1="68" x2="266" y2="76"/>
+      <line x1="279" y1="66" x2="279" y2="76"/><line x1="288" y1="69" x2="288" y2="76"/>
+      <line x1="301" y1="64" x2="301" y2="76"/><line x1="309" y1="67" x2="309" y2="76"/>
+      <line x1="318" y1="63" x2="318" y2="76"/><line x1="327" y1="66" x2="327" y2="76"/>
+      <line x1="335" y1="62" x2="335" y2="76"/><line x1="344" y1="65" x2="344" y2="76"/>
+      <line x1="352" y1="64" x2="352" y2="76"/><line x1="368" y1="66" x2="368" y2="76"/>
+      <line x1="381" y1="68" x2="381" y2="76"/><line x1="399" y1="67" x2="399" y2="76"/>
+      <line x1="418" y1="70" x2="418" y2="76"/><line x1="447" y1="72" x2="447" y2="76"/>
+    </g>
+
+    <line x1="240" y1="6" x2="240" y2="82" stroke="#c8c8cc" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="244" y="94" fill="#c8c8cc" font-size="9" font-family="sans-serif">first crack 217°F</text>
+
+    <text x="42" y="104" fill="#8a8a8e" font-size="9" font-family="sans-serif">0:00</text>
+    <text x="240" y="104" fill="#8a8a8e" font-size="9" font-family="sans-serif">6:40</text>
+    <text x="420" y="104" fill="#8a8a8e" font-size="9" font-family="sans-serif">11:20</text>
+    <text x="572" y="104" fill="#8a8a8e" font-size="9" font-family="sans-serif">15:00</text>
+  </svg>
+
+  <div style="display:flex;gap:26px;margin-top:12px;padding-top:11px;border-top:1px solid #3a3a3c;font-size:.82rem;color:#c8c8cc">
+    <span>rate <strong style="color:#fff">18</strong>/min</span>
+    <span>total <strong style="color:#fff">143</strong></span>
+    <span>first crack <strong style="color:#fff">6:40 · 217°F</strong></span>
+    <span>signal <strong style="color:#7ec97e">clear</strong> (14 dB over floor)</span>
+  </div>
+</div>
+
+<h3>The unhappy states, which is where the design is decided</h3>
+
+<div style="background:#141416;border:1px solid #6b4a26;border-radius:10px;padding:12px 16px;margin:10px 0;font-family:-apple-system,Segoe UI,sans-serif;color:#e8e8ea">
+  <strong style="font-size:.9rem">Crack listener</strong>
+  <span style="color:#e0a44a;font-size:.78rem;float:right">▲ noise floor not learned</span>
+  <p style="margin:.5rem 0 0;font-size:.83rem;color:#c8c8cc">Counting is off. Run one empty preheat at the fan and drum settings you roast at, and the floor is learned in about a minute. Until then the roast is still <em>recorded</em> — nothing is lost, and it can be analysed afterwards.</p>
+</div>
+
+<div style="background:#141416;border:1px solid #6b4a26;border-radius:10px;padding:12px 16px;margin:10px 0;font-family:-apple-system,Segoe UI,sans-serif;color:#e8e8ea">
+  <strong style="font-size:.9rem">Crack listener</strong>
+  <span style="color:#e0a44a;font-size:.78rem;float:right">▲ signal buried · 3 dB over floor</span>
+  <p style="margin:.5rem 0 0;font-size:.83rem;color:#c8c8cc">Counts below are unreliable and are shown greyed. Likely causes: fan above 80%, the mic has moved, or something else in the room is loud. <strong>The count is suppressed rather than guessed</strong> — a wrong crack count is worse than none, because it will be believed.</p>
+</div>
+
+<div style="background:#141416;border:1px solid #3a3a3c;border-radius:10px;padding:12px 16px;margin:10px 0;font-family:-apple-system,Segoe UI,sans-serif;color:#e8e8ea">
+  <strong style="font-size:.9rem">Crack listener</strong>
+  <span style="color:#8a8a8e;font-size:.78rem;float:right">○ off</span>
+  <p style="margin:.5rem 0 0;font-size:.83rem;color:#c8c8cc">No microphone selected. Nothing is recorded and no audio leaves this machine.</p>
+</div>
+
+<p>Three rules the mockups are making concrete, and they matter more than the layout:</p>
+<ul>
+  <li><strong>Recording and counting are separate.</strong> Audio is captured even when detection cannot run, because a recording can be re-analysed later and a missed roast cannot.</li>
+  <li><strong>Suppress rather than guess.</strong> When the signal is buried, show no number. A plausible wrong count gets trusted and acted on.</li>
+  <li><strong>Off means off.</strong> A microphone in a workplace needs an unambiguous off state, and it should be the default.</li>
+</ul>
+
+<h2>The claim this is meant to test</h2>
+
+<blockquote><p>"You want to minimise crackling — too much moisture, so we extend the drying."</p></blockquote>
+
+<p>Mechanically plausible: crack vigour comes from steam pressure, so wetter material should crack harder. But <strong>it is a hypothesis about this product on this machine, and it has never been measured</strong> — which is precisely what makes it worth instrumenting.</p>
+
+<p>The roast log is already half of the experiment. <code>Humidity %</code> is recorded for <strong>15 of 31 roasts, ranging 10.1–12.7%</strong>, alongside soak/cure duration and drying method. What is missing is any measure of crackling. One note gets close — <em>"too large a batch; popping at 216°F; foot-smelling from Cabello's dryer"</em> — which shows the observation is already being made by hand, in prose, unquantified.</p>
+
+<p>So Phase B's real output is not a feature; it is <strong>a column</strong>. Once crack density sits beside humidity for a dozen roasts, the hypothesis is either visible or it is not. Until then nothing should automatically extend anything.</p>
+
+<p><em>Complication worth stating up front:</em> the owner's own notes record <strong>two crack ranges — 217–218 °F and 228–231 °F</strong>. Coffee's first and second crack are far further apart and acoustically distinct. Whether these are two populations, two mechanisms, or one event with a gap is unknown, and a detector that assumes a single "first crack" will describe this product badly.</p>
+
+<h2>Phases</h2>
+
+<h3>A — Capture and calibrate</h3>
+<p>A new <code>crack_listener.py</code>. Pick a mic, record to a file beside the profile, and learn the noise floor from an empty preheat — sampled at several fan and drum settings, since those are the noise. No detection. Deliverable: a recording of a real roast and a noise fingerprint of the machine, which is what the rest needs to be developed against offline.</p>
+
+<h3>B — Detect and count</h3>
+<p>Spectral-flux onset detection against the state-conditioned floor. Emits crack events with timestamps, and writes crack density into the profile beside temperature. <strong>Tune it against the Phase A recordings, not live.</strong> The measure of success is agreement with a human listening to the same recording — so the first job is one hand-labelled roast to score against.</p>
+
+<h3>C — Show it</h3>
+<p>The strip and panel above, plus the counts in the roast record so they reach the log.</p>
+
+<h3>D — Only if C shows a correlation</h3>
+<p>Relate crack density to drying. Even then, advisory: surface "crack onset is 40 s earlier and denser than your reference — consider extending drying" and let the operator act. Nothing here should move a burner. <strong>If Phase C shows no correlation, D is not built, and the spec was still worth it</strong> — that is the answer arriving, not the project failing.</p>
+
+<h2>What is verified, and what is not</h2>
+
+<ul>
+  <li><strong>Verified Aug 6, 2026:</strong> Artisan has no audio input anywhere in <code>artisanlib/</code> — no <code>QAudioInput</code>, <code>QAudioSource</code>, <code>QMediaCaptureSession</code>, <code>pyaudio</code> or <code>sounddevice</code>. This is entirely new surface, with no upstream code to conflict with. Also verified: the 15 humidity values and the "popping at 216°F" note, read from the roast log.</li>
+  <li><strong>Not verified — and this is the risk that would kill it:</strong> that cracks are audible over this machine at all. Small batches (0.1–0.675 kg) make far fewer, quieter cracks than a commercial drum. <strong>Test this before writing any code</strong> — record one roast on a phone held near the drum and listen back. If a human cannot hear the cracks over the fan in that recording, no detector will, and the spec should be closed rather than built.</li>
+  <li><strong>Unknown:</strong> bay nut crack acoustics. Everything published on roast crack detection is about coffee. Two crack ranges suggests this product does not behave like coffee acoustically either.</li>
+  <li><strong>Not designed:</strong> retention and privacy. Continuous recording in a workplace needs a stated policy — how long files are kept, where they live, who can hear them. Decide before Phase A ships, not after.</li>
+</ul>
+
+</body>
+</html>

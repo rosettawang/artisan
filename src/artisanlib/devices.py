@@ -1234,7 +1234,16 @@ class DeviceAssignmentDlg(ArtisanResizeablDialog):
 
         self.kaleidoEventFlags:list[QCheckBox] = [QCheckBox(l) for l in eventFlagLabels]
         for i, cb in enumerate(self.kaleidoEventFlags):
-            cb.setToolTip(QApplication.translate('Tooltip','Receive {} event from machine').format(cb.text()))
+            # These only do anything if the machine actually reports events in the low
+            # 4 bits of sid. Many Kaleido machines report a constant sid (this fork's
+            # reports 0 on every frame, measured Aug 6 2026), which makes every flag
+            # inert -- and a machine reporting a constant sid=1 would instead read as a
+            # permanent CHARGE. That is why they all default to off. Said in the tooltip
+            # so nobody spends an afternoon debugging a checkbox that cannot work.
+            cb.setToolTip(QApplication.translate('Tooltip',
+                'Receive {} event from machine.\n\nOnly works if the machine reports events '
+                'in the low 4 bits of its status word. Many do not, in which case this flag '
+                'has no effect. Check the machine before relying on it.').format(cb.text()))
             if len(self.aw.kaleidoEventFlags) > i:
                 cb.setChecked(self.aw.kaleidoEventFlags[i])
 

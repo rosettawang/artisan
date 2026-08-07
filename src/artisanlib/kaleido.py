@@ -44,6 +44,40 @@ from artisanlib.async_comm import AsyncLoopThread
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
 
+def diagnose_serial_error(e:BaseException) -> str|None:
+    """Turn an opaque serial failure into something the operator can act on.
+
+    Returns a remediation line, or None when the exception is not one of the
+    known-confusing cases and the raw message is as good as it gets.
+
+    EINVAL is the one that matters. A USB-serial adapter (Silicon Labs CP210x
+    and friends) can reach a state where the port opens and tcgetattr succeeds
+    but *every* tcsetattr fails with errno 22 -- including writing back
+    byte-identical attributes. Observed on macOS, Aug 6, 2026. It is not a
+    settings problem and no software can work around it: `stty -f <port> 57600`
+    fails identically, so the OS cannot configure the port either. Only a
+    physical replug clears it. Without this message the generic error sends
+    people to check baud rates, which is exactly the wrong place.
+    """
+    errno = getattr(e, 'errno', None)
+    if errno is None and e.args and isinstance(e.args[0], int):
+        errno = e.args[0]  # termios.error carries (errno, msg) rather than .errno
+    text = str(e)
+    if errno == 22 or 'Invalid argument' in text:
+        return ('the USB-serial adapter is not accepting configuration (EINVAL). This is the '
+                'adapter or its driver wedged, not a baud rate or port setting -- the OS cannot '
+                'configure it either. Unplug the USB cable, wait ~5 seconds and plug it back in. '
+                'If that does not help, power-cycle the roaster and replug.')
+    if errno == 2 or 'No such file or directory' in text:
+        return 'the serial port does not exist. Check the roaster is plugged in and the port name is right.'
+    if errno == 16 or 'Resource busy' in text:
+        return ('the serial port is held by another process. Only one program can own it -- close '
+                'the other Artisan instance, or whatever else has the port open.')
+    if errno == 13 or 'Permission denied' in text:
+        return 'no permission to open the serial port. Check the device node permissions.'
+    return None
+
+
 class State(TypedDict, total=False):
     sid:int    # device status
     TU:str     # temperature unit
@@ -61,7 +95,7 @@ class KaleidoPort:
 
     __slots__ = [ '_asyncLoopThread', '_write_queue', '_running', '_default_data_stream', '_ping_timeout', '_open_timeout', '_init_timeout',
             '_send_timeout', '_read_timeout', '_ping_retry_delay', '_reconnect_delay', 'send_button_timeout', '_single_await_var_prefix',
-            '_state', '_pending_requests', '_logging' ]
+            '_state', '_pending_requests', '_logging', '_last_serial_remedy' ]
 
     def __init__(self) -> None:
         # internals
@@ -91,6 +125,9 @@ class KaleidoPort:
 
         # associates var names to pending request asyncio.Event locks
         self._pending_requests: dict[str, asyncio.Event] = {}
+
+        # last serial remediation logged, so the reconnect loop does not repeat it every retry
+        self._last_serial_remedy:str|None = None
 
         # configuration
         self._logging = False # if True device communication is logged
@@ -308,7 +345,8 @@ class KaleidoPort:
                         self._write_queue = asyncio.Queue()
                         await asyncio.wait_for(self.ws_initialize(websocket, mode), timeout=self._init_timeout)
                         SN:str|int|float|None = await self.get_state_async('SN')
-                        _log.debug('connected (%s)', SN)
+                        _log.debug('connected (%s)',
+                                   'no serial number reported' if SN is None else SN)
                         if connected_handler is not None:
                             try:
                                 connected_handler()
@@ -462,7 +500,9 @@ class KaleidoPort:
                     self._write_queue = asyncio.Queue()
                     await asyncio.wait_for(self.serial_initialize(reader, writer, mode), timeout=self._init_timeout)
 
-                    _log.debug('connected')
+                    SN:str|int|float|None = await self.get_state_async('SN')
+                    _log.debug('connected (%s)',
+                               'no serial number reported' if SN is None else SN)
                     if connected_handler is not None:
                         try:
                             connected_handler()
@@ -484,7 +524,16 @@ class KaleidoPort:
             except TimeoutError:
                 _log.debug('connection timeout')
             except Exception as e: # pylint: disable=broad-except
-                _log.error(e)
+                remedy = diagnose_serial_error(e)
+                if remedy is None:
+                    _log.error(e)
+                else:
+                    # This reconnect loop retries forever, so log the remedy once per
+                    # cause rather than on every attempt.
+                    if remedy != self._last_serial_remedy:
+                        self._last_serial_remedy = remedy
+                        _log.error('%s: %s', serial['port'], remedy)
+                    _log.debug('serial error on %s: %s', serial['port'], e)
             finally:
                 if self._write_queue is not None:
                     try:
