@@ -126,6 +126,7 @@ const files = (await readdir(SPECS_DIR))
 const kept = [];
 const removed = [];
 const unmarked = [];
+const noBacklink = [];
 
 for (const file of files) {
   const html = await read(file);
@@ -136,6 +137,9 @@ for (const file of files) {
   }
   if (status === 'canonical') continue;
   if (!status) unmarked.push(file);
+  // Every spec carries a link back to the dashboard. Cheap to add, easy to
+  // forget, and a spec with no way back is a dead end when read on its own.
+  if (!/href="index\.html"/.test(html)) noBacklink.push(file);
   kept.push({
     file,
     status: status ?? 'unmarked',
@@ -300,6 +304,12 @@ if (undeclared.length) {
       `spec-decision meta, so it will not appear in "Decisions waiting":\n` +
       undeclared.map((k) => `    ${k.file}`).join('\n') +
       `\n  Add <meta name="spec-decision" content="…"> per decision, or reword the blocker.`
+  );
+}
+if (noBacklink.length) {
+  console.warn(
+    `\n! ${noBacklink.length} spec(s) have no link back to the index: ${noBacklink.join(', ')}\n` +
+      `  Add <p><a href="index.html">← Specs index</a></p> just inside <body>.`
   );
 }
 if (unmarked.length) {
